@@ -110,6 +110,11 @@ def load_gpu_deck(svg_file : string) : GpuDeck {
     return <- gpu_deck
 }
 
+// Find card index by name. Returns -1 if not found.
+// Names are sorted alphabetically. Format: "{suit}_{rank}" where suit is
+// club/diamond/heart/spade, rank is 1 (ace), 2-10, jack, queen, king.
+// Special cards: "back", "alternate-back", "joker_black", "joker_red".
+// All names available in deck.names array.
 def find_card(deck : GpuDeck; name : string) : int {
     for (i in range(length(deck.names))) {
         if (deck.names[i] == name) {
