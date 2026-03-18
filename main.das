@@ -191,9 +191,7 @@ struct CmdDebugDrawArgs {
 [live_command(description="Debug: skip or isolate draw ops. skip=N skips op N, only=N draws only op N, both -1 resets.")]
 def cmd_debug_draw(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<CmdDebugDrawArgs>)
-    debug_skip_op = args.skip
-    debug_only_op = args.only
-    return JV("skip={debug_skip_op} only={debug_only_op}")
+    return JV("skip={args.skip} only={args.only}")
 }
 
 struct CmdSaveViewArgs {
