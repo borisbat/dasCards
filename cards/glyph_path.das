@@ -28,7 +28,7 @@ def load_glyph_font(path : string) : GlyphFont {
         fclose(f)
     }
     if (length(font.data) == 0) {
-        print("glyph_path: failed to load font: {path}\n")
+        to_log(LOG_ERROR, "glyph_path: failed to load font: {path}\n")
         return <- font
     }
     unsafe {
@@ -36,7 +36,7 @@ def load_glyph_font(path : string) : GlyphFont {
         if (ok != 0) {
             font.loaded = true
         } else {
-            print("glyph_path: stbtt_InitFont failed\n")
+            to_log(LOG_ERROR, "glyph_path: stbtt_InitFont failed for '{path}'\n")
         }
     }
     return <- font

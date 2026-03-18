@@ -9,6 +9,9 @@ require daslib/safe_addr
 require daslib/math_boost
 require card_mesh
 require strings
+require fio
+
+let CARDS_DIR = dir_name(get_module_file_name("opengl_cards"))
 
 // ============================================================================
 // Card dimensions (SVG document space)
@@ -82,6 +85,7 @@ struct CardRenderer {
 struct GpuDeck {
     cards : array<GpuCard>
     names : array<string>
+    loaded : bool = false
 }
 
 // ============================================================================
@@ -92,9 +96,14 @@ def create_card_renderer() : CardRenderer {
     return CardRenderer(program = cache_shader_program(vs_card`shader_text, fs_card`shader_text))
 }
 
-def load_gpu_deck(svg_file : string) : GpuDeck {
-    var deck <- load_deck(svg_file)
-    var gpu_deck : GpuDeck
+def load_gpu_deck() : GpuDeck {
+    let svg_path = "{CARDS_DIR}/svg-cards.svg"
+    var deck <- load_deck(svg_path)
+    var gpu_deck = GpuDeck()
+    if (!deck.loaded) {
+        to_log(LOG_ERROR, "load_gpu_deck: failed to load '{svg_path}'\n")
+        return <- gpu_deck
+    }
     var all_names : array<string>
     for (kv in keys(deck.cards)) {
         all_names |> push(clone_string(kv))
@@ -108,6 +117,7 @@ def load_gpu_deck(svg_file : string) : GpuDeck {
             }
         }
     }
+    gpu_deck.loaded = true
     return <- gpu_deck
 }
 

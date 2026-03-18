@@ -72,7 +72,7 @@ def test_card_doc_dimensions(t : T?) {
 
 [test]
 def test_find_card_in_empty_deck(t : T?) {
-    var deck : GpuDeck
+    var deck = GpuDeck()
     t |> equal(find_card(deck, "heart_1"), -1)
     t |> equal(find_card(deck, ""), -1)
     t |> equal(card_count(deck), 0)
@@ -80,7 +80,7 @@ def test_find_card_in_empty_deck(t : T?) {
 
 [test]
 def test_find_card_with_names(t : T?) {
-    var deck : GpuDeck
+    var deck = GpuDeck()
     deck.names |> push("back")
     deck.names |> push("club_1")
     deck.names |> push("heart_queen")

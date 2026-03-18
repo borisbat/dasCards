@@ -5,10 +5,13 @@ module card_mesh public
 
 require math
 require strings
+require fio
 require pugixml/PUGIXML_boost
 require svg_path
 require earcut
 require glyph_path
+
+let CARD_MESH_DIR = dir_name(get_module_file_name("card_mesh"))
 
 // ============================================================================
 // Card mesh data types
@@ -77,6 +80,7 @@ struct CardDeck {
     components : table<string; SvgComponent>
     cards : table<string; CardMesh>
     @safe_when_uninitialized font : GlyphFont
+    loaded : bool = false
 }
 
 // ============================================================================
@@ -246,10 +250,10 @@ def private collect_components_recursive(node : auto; var deck : CardDeck; paren
 }
 
 def private load_svg_components(svg_file : string; var deck : CardDeck) {
-    deck.font <- load_glyph_font("cards/DejaVuSerif.ttf")
+    deck.font <- load_glyph_font("{CARD_MESH_DIR}/DejaVuSerif.ttf")
     open_xml(svg_file) <| $(doc, ok) {
         if (!ok) {
-            print("Failed to open SVG: {svg_file}\n")
+            to_log(LOG_ERROR, "card_mesh: failed to open SVG: {svg_file}\n")
             return
         }
         let root = doc.document_element
@@ -268,6 +272,7 @@ def private load_svg_components(svg_file : string; var deck : CardDeck) {
                 }
             }
         }
+        deck.loaded = true
     }
 }
 
@@ -956,6 +961,8 @@ def private tessellate_text(font : GlyphFont; text : string; fill : float4; xfor
 def load_deck(svg_file : string) : CardDeck {
     var deck = CardDeck()
     load_svg_components(svg_file, deck)
-    print("Loaded {length(deck.components)} components, {length(deck.cards)} cards\n")
+    if (deck.loaded) {
+        to_log(LOG_INFO, "card_mesh: loaded {length(deck.components)} components, {length(deck.cards)} cards from '{svg_file}'\n")
+    }
     return <- deck
 }

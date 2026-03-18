@@ -27,7 +27,7 @@ require cards/opengl_cards
 // ============================================================================
 
 var renderer : CardRenderer
-var gpu_deck : GpuDeck
+var gpu_deck = GpuDeck()
 var display_w = 0
 var display_h = 0
 
@@ -254,10 +254,13 @@ def cmd_load_view(input : JsonValue?) : JsonValue? {
 def init() {
     live_create_window("Card Viewer", 1280, 800)
     renderer = create_card_renderer()
-    gpu_deck <- load_gpu_deck("cards/svg-cards.svg")
+    gpu_deck <- load_gpu_deck()
+    if (!gpu_deck.loaded) {
+        to_log(LOG_ERROR, "card viewer: failed to load deck\n")
+    }
     back_card_idx = find_card(gpu_deck, "back")
     build_layout()
-    print("card viewer: init (is_reload={is_reload()}, cards={card_count(gpu_deck)})\n")
+    to_log(LOG_INFO, "card viewer: init (is_reload={is_reload()}, cards={card_count(gpu_deck)})\n")
 }
 
 [export]
@@ -447,7 +450,7 @@ def update() {
 
 [export]
 def shutdown() {
-    print("card viewer: shutdown\n")
+    to_log(LOG_INFO, "card viewer: shutdown\n")
     live_destroy_window()
 }
 

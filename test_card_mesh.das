@@ -4,7 +4,6 @@ options persistent_heap
 
 require cards/card_mesh
 require math
-require fio
 require dastest/testing_boost public
 
 [test]
@@ -48,12 +47,10 @@ def test_parse_transform_matrix(t : T?) {
 [test]
 def test_load_deck(t : T?) {
     // requires CWD to be the dasCards directory
-    let f = fopen("cards/svg-cards.svg", "rb")
-    if (f == null) {
-        return  // skip when run from wrong CWD
+    let deck = load_deck("{CARD_MESH_DIR}/svg-cards.svg")
+    if (!deck.loaded) {
+        return
     }
-    fclose(f)
-    let deck = load_deck("cards/svg-cards.svg")
     t |> success(length(deck.components) > 10, "should load components")
     t |> success(length(deck.cards) > 40, "should load cards")
 }
@@ -134,12 +131,10 @@ def test_parse_transform_scale_uniform(t : T?) {
 [test]
 def test_load_deck_spade_queen_has_color(t : T?) {
     // Regression: spade_queen was missing colored polygons (queen_2 uses <polygon>, not <path>)
-    let f = fopen("cards/svg-cards.svg", "rb")
-    if (f == null) {
+    let deck = load_deck("{CARD_MESH_DIR}/svg-cards.svg")
+    if (!deck.loaded) {
         return
     }
-    fclose(f)
-    let deck = load_deck("cards/svg-cards.svg")
     var found = false
     deck.cards |> get("spade_queen") <| $(card) {
         found = true
@@ -153,12 +148,10 @@ def test_load_deck_spade_queen_has_color(t : T?) {
 [test]
 def test_load_deck_circle_elements(t : T?) {
     // Cards use <circle> elements for decorative dots on face cards
-    let f = fopen("cards/svg-cards.svg", "rb")
-    if (f == null) {
+    let deck = load_deck("{CARD_MESH_DIR}/svg-cards.svg")
+    if (!deck.loaded) {
         return
     }
-    fclose(f)
-    let deck = load_deck("cards/svg-cards.svg")
     // heart_queen has many circles — check it has substantial geometry
     var found = false
     deck.cards |> get("heart_queen") <| $(card) {
@@ -172,12 +165,10 @@ def test_load_deck_circle_elements(t : T?) {
 [test]
 def test_load_deck_polyline_elements(t : T?) {
     // king_2, king_3, jack_3 use <polyline> elements
-    let f = fopen("cards/svg-cards.svg", "rb")
-    if (f == null) {
+    let deck = load_deck("{CARD_MESH_DIR}/svg-cards.svg")
+    if (!deck.loaded) {
         return
     }
-    fclose(f)
-    let deck = load_deck("cards/svg-cards.svg")
     var found = false
     deck.cards |> get("spade_king") <| $(card) {
         found = true
