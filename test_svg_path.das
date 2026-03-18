@@ -122,3 +122,66 @@ def test_card_base_path(t : T?) {
     t |> equal(length(flat.contours), 1)
     t |> equal(flat.contours[0].closed, true)
 }
+
+[test]
+def test_parse_multiple_close(t : T?) {
+    // two subpaths
+    let path = parse_svg_path("M0,0 L10,0 L10,10 Z M20,20 L30,20 L30,30 Z")
+    t |> equal(length(path.commands), 8)
+    t |> equal(int(path.commands[3].cmd), int(SvgCmd.ClosePath))
+    t |> equal(int(path.commands[7].cmd), int(SvgCmd.ClosePath))
+}
+
+[test]
+def test_parse_relative_arc(t : T?) {
+    let path = parse_svg_path("M10,10 a5,5 0 0,1 10,0")
+    t |> equal(length(path.commands), 2)
+    t |> equal(int(path.commands[1].cmd), int(SvgCmd.ArcTo))
+    t |> equal(path.commands[1].abs, false)
+    let arc = unpack_arc(path.commands[1])
+    t |> success(abs(arc.rx - 5.0) < 0.01)
+    t |> equal(arc.sweep, true)
+}
+
+[test]
+def test_parse_multi_lineto(t : T?) {
+    // multiple coordinate pairs for same command
+    let path = parse_svg_path("M0,0 L10,10 20,20 30,30")
+    t |> equal(length(path.commands), 4) // M + 3 L
+    t |> success(abs(path.commands[3].pts[0].x - 30.0) < 0.01)
+}
+
+[test]
+def test_flatten_arc(t : T?) {
+    let path = parse_svg_path("M0,0 A50,50 0 0,1 100,0")
+    let flat = flatten_svg_path(path, 0.5)
+    t |> equal(length(flat.contours), 1)
+    t |> success(length(flat.contours[0].points) > 3, "arc should produce multiple points")
+}
+
+[test]
+def test_empty_path(t : T?) {
+    let path = parse_svg_path("")
+    t |> equal(length(path.commands), 0)
+    let flat = flatten_svg_path(path)
+    t |> equal(length(flat.contours), 0)
+}
+
+[test]
+def test_move_only(t : T?) {
+    let path = parse_svg_path("M10,20")
+    t |> success(length(path.commands) >= 1, "should parse M command")
+    let flat = flatten_svg_path(path)
+    // single move with no lines — may produce empty or single-point contour
+    t |> success(length(flat.contours) == 0 || length(flat.contours[0].points) <= 1,
+        "move-only should not produce a real contour")
+}
+
+[test]
+def test_flatten_tight_tolerance(t : T?) {
+    let path = parse_svg_path("M0,0 C0,50 50,100 100,100")
+    let loose = flatten_svg_path(path, 5.0)
+    let tight = flatten_svg_path(path, 0.1)
+    t |> success(length(tight.contours[0].points) > length(loose.contours[0].points),
+        "tighter tolerance should produce more points")
+}

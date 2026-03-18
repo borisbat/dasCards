@@ -167,6 +167,9 @@ def get_font_ascent(font : GlyphFont; scale : float) : float {
 }
 
 def get_codepoint_advance(font : GlyphFont; codepoint : int; scale : float) : float {
+    if (!font.loaded) {
+        return 0.0
+    }
     var advance_w = 0
     var lsb = 0
     unsafe {
