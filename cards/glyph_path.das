@@ -1,6 +1,7 @@
 options gen2
-options no_aot
 options persistent_heap
+
+module glyph_path public
 
 require math
 require fio
@@ -15,7 +16,7 @@ var font_loaded = false
 var font_data : array<uint8>
 var font_info : stbtt_fontinfo
 
-def ensure_font_loaded() {
+def private ensure_font_loaded() {
     if (font_loaded) {
         return
     }
@@ -45,7 +46,7 @@ def ensure_font_loaded() {
 // Flatten quadratic bezier (TrueType uses quadratics)
 // ============================================================================
 
-def flatten_quadratic(p0, p1, p2 : float2; tolerance : float; var output : array<float2>) {
+def private flatten_quadratic(p0, p1, p2 : float2; tolerance : float; var output : array<float2>) {
     let d = point_line_distance_glyph(p1, p0, p2)
     if (d <= tolerance) {
         output |> push(p2)
@@ -58,7 +59,7 @@ def flatten_quadratic(p0, p1, p2 : float2; tolerance : float; var output : array
     flatten_quadratic(mid, p12, p2, tolerance, output)
 }
 
-def point_line_distance_glyph(p, a, b : float2) : float {
+def private point_line_distance_glyph(p, a, b : float2) : float {
     let ab = b - a
     let len_sq = dot(ab, ab)
     if (len_sq < 1e-12) {
@@ -67,7 +68,7 @@ def point_line_distance_glyph(p, a, b : float2) : float {
     return abs((b.x - a.x) * (a.y - p.y) - (a.x - p.x) * (b.y - a.y)) / sqrt(len_sq)
 }
 
-def flatten_cubic_glyph(p0, p1, p2, p3 : float2; tolerance : float; var output : array<float2>) {
+def private flatten_cubic_glyph(p0, p1, p2, p3 : float2; tolerance : float; var output : array<float2>) {
     let d1 = point_line_distance_glyph(p1, p0, p3)
     let d2 = point_line_distance_glyph(p2, p0, p3)
     if (d1 + d2 <= tolerance) {

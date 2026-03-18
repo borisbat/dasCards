@@ -1,6 +1,7 @@
 options gen2
-options no_aot
 options persistent_heap
+
+module card_mesh public
 
 require math
 require strings
@@ -40,12 +41,12 @@ struct CardMesh {
     draw_order : array<DrawOp>
 }
 
-def add_mesh(var result : CardMesh; var cm : ColoredMesh) {
+def private add_mesh(var result : CardMesh; var cm : ColoredMesh) {
     result.draw_order |> push(DrawOp(mesh_idx = length(result.meshes)))
     result.meshes |> emplace(cm)
 }
 
-def add_stencil_group(var result : CardMesh; var sg : StencilGroup) {
+def private add_stencil_group(var result : CardMesh; var sg : StencilGroup) {
     result.draw_order |> push(DrawOp(stencil_idx = length(result.stencil_groups)))
     result.stencil_groups |> emplace(sg)
 }
@@ -81,7 +82,7 @@ struct CardDeck {
 // Color parsing
 // ============================================================================
 
-def hex_digit(ch : int) : int {
+def private hex_digit(ch : int) : int {
     if (ch >= '0' && ch <= '9') {
         return ch - '0'
     } elif (ch >= 'a' && ch <= 'f') {
@@ -127,7 +128,7 @@ def extract_fill_from_style(style : string) : float4 {
     return parse_hex_color(slice(style, start, end_idx))
 }
 
-def get_fill_color(node : auto; parent_fill : float4) : float4 {
+def private get_fill_color(node : auto; parent_fill : float4) : float4 {
     let style = node_attr(node, "style", "")
     if (length(style) > 0 && find(style, "fill:") >= 0) {
         return extract_fill_from_style(style)
@@ -190,18 +191,18 @@ def parse_transform(s : string) : Xform2D {
     return result
 }
 
-def xform_point(pt : float2; m : Xform2D) : float2 {
+def private xform_point(pt : float2; m : Xform2D) : float2 {
     return float2(m.a * pt.x + m.c * pt.y + m.e, m.b * pt.x + m.d * pt.y + m.f)
 }
 
-def xform_translate(tx, ty : float) : Xform2D {
+def private xform_translate(tx, ty : float) : Xform2D {
     var r = Xform2D()
     r.e = tx
     r.f = ty
     return <- r
 }
 
-def xform_compose(outer, inner : Xform2D) : Xform2D {
+def private xform_compose(outer, inner : Xform2D) : Xform2D {
     // outer * inner — apply inner first, then outer
     var r = Xform2D()
     r.a = outer.a * inner.a + outer.c * inner.b
@@ -217,14 +218,14 @@ def xform_compose(outer, inner : Xform2D) : Xform2D {
 // SVG loading
 // ============================================================================
 
-def has_use_child(node : auto) : bool {
+def private has_use_child(node : auto) : bool {
     for (u in each_child(node, "use")) {
         return true
     }
     return false
 }
 
-def collect_components_recursive(node : auto; var deck : CardDeck; parent_fill : float4) {
+def private collect_components_recursive(node : auto; var deck : CardDeck; parent_fill : float4) {
     for (g in each_child(node, "g")) {
         let id = node_attr(g, "id", "")
         if (length(id) > 0 && !has_use_child(g)) {
@@ -243,7 +244,7 @@ def collect_components_recursive(node : auto; var deck : CardDeck; parent_fill :
     }
 }
 
-def load_svg_components(svg_file : string; var deck : CardDeck) {
+def private load_svg_components(svg_file : string; var deck : CardDeck) {
     open_xml(svg_file) <| $(doc, ok) {
         if (!ok) {
             print("Failed to open SVG: {svg_file}\n")
@@ -268,7 +269,7 @@ def load_svg_components(svg_file : string; var deck : CardDeck) {
     }
 }
 
-def collect_paths(node : auto; var comp : SvgComponent; parent_fill : float4; parent_xform : Xform2D = Xform2D()) {
+def private collect_paths(node : auto; var comp : SvgComponent; parent_fill : float4; parent_xform : Xform2D = Xform2D()) {
     // Iterate ALL children in DOM order to preserve SVG paint order
     for (child in each_child(node)) {
         let tag = child.name
@@ -305,7 +306,7 @@ def collect_paths(node : auto; var comp : SvgComponent; parent_fill : float4; pa
 // Card building
 // ============================================================================
 
-def merge_sub_mesh(var result : CardMesh; var sub : CardMesh) {
+def private merge_sub_mesh(var result : CardMesh; var sub : CardMesh) {
     for (op in sub.draw_order) {
         if (op.mesh_idx >= 0) {
             let m & = unsafe(sub.meshes[op.mesh_idx])
@@ -333,7 +334,7 @@ def merge_sub_mesh(var result : CardMesh; var sub : CardMesh) {
     }
 }
 
-def resolve_use(use_node : auto; deck : CardDeck; grp_xform : Xform2D; defs_node : auto; var result : CardMesh) {
+def private resolve_use(use_node : auto; deck : CardDeck; grp_xform : Xform2D; defs_node : auto; var result : CardMesh) {
     var href = node_attr(use_node, "xlink:href", "")
     if (length(href) == 0) {
         href = node_attr(use_node, "href", "")
@@ -420,7 +421,7 @@ def resolve_use(use_node : auto; deck : CardDeck; grp_xform : Xform2D; defs_node
     }
 }
 
-def build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xform2D; defs_node : auto; parent_fill : float4 = float4(0.0, 0.0, 0.0, 1.0)) : CardMesh {
+def private build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xform2D; defs_node : auto; parent_fill : float4 = float4(0.0, 0.0, 0.0, 1.0)) : CardMesh {
     var result : CardMesh
     let grp_xform_str = node_attr(card_node, "transform", "")
     let grp_xform = length(grp_xform_str) > 0 ? xform_compose(parent_xform, parse_transform(grp_xform_str)) : parent_xform
@@ -500,11 +501,11 @@ def build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xform2D; d
 // Tessellation
 // ============================================================================
 
-def tessellate_path(d : string; fill : float4; var result : CardMesh) {
+def private tessellate_path(d : string; fill : float4; var result : CardMesh) {
     tessellate_path_xform(d, fill, Xform2D(), result)
 }
 
-def point_in_polygon(pt : float2; poly : array<float2>) : bool {
+def private point_in_polygon(pt : float2; poly : array<float2>) : bool {
     var inside = false
     let n = length(poly)
     var j = n - 1
@@ -519,7 +520,7 @@ def point_in_polygon(pt : float2; poly : array<float2>) : bool {
     return inside
 }
 
-def signed_polygon_area(pts : array<float2>) : float {
+def private signed_polygon_area(pts : array<float2>) : float {
     var area = 0.0
     let n = length(pts)
     for (i in range(n)) {
@@ -530,7 +531,7 @@ def signed_polygon_area(pts : array<float2>) : float {
     return area * 0.5
 }
 
-def tessellate_path_xform(d : string; fill : float4; xform : Xform2D; var result : CardMesh; evenodd : bool = false) {
+def private tessellate_path_xform(d : string; fill : float4; xform : Xform2D; var result : CardMesh; evenodd : bool = false) {
     if (fill.w <= 0.0) {
         return
     }
@@ -804,7 +805,7 @@ def tessellate_path_xform(d : string; fill : float4; xform : Xform2D; var result
 // Text tessellation (uses glyph_path for outline data)
 // ============================================================================
 
-def tessellate_glyph(codepoint : int; scale : float; fill : float4; xform : Xform2D; var result : CardMesh) {
+def private tessellate_glyph(codepoint : int; scale : float; fill : float4; xform : Xform2D; var result : CardMesh) {
     let flat = get_glyph_path(codepoint, scale)
     let num_contours = length(flat.contours)
     if (num_contours == 0) {
@@ -856,7 +857,7 @@ def tessellate_glyph(codepoint : int; scale : float; fill : float4; xform : Xfor
     }
 }
 
-def tessellate_text(text : string; fill : float4; xform : Xform2D; var result : CardMesh; pixel_height : float = 22.0) {
+def private tessellate_text(text : string; fill : float4; xform : Xform2D; var result : CardMesh; pixel_height : float = 22.0) {
     let scale = get_font_scale(pixel_height)
     var cursor_x = 0.0
     for (ch in each(text)) {

@@ -1,5 +1,6 @@
 options gen2
-options no_aot
+
+module svg_path public
 
 require math
 require strings
@@ -50,11 +51,11 @@ def make_parser(d : string) : PathParser {
     return PathParser(src = d, dat = unsafe(reinterpret<uint8?> d), pos = 0, len = length(d))
 }
 
-def ch_at(p : PathParser) : int {
+def private ch_at(p : PathParser) : int {
     return p.pos < p.len ? int(unsafe(p.dat[p.pos])) : 0
 }
 
-def skip_wsc(var p : PathParser) {
+def private skip_wsc(var p : PathParser) {
     while (p.pos < p.len) {
         let ch = ch_at(p)
         if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == ',') {
@@ -65,7 +66,7 @@ def skip_wsc(var p : PathParser) {
     }
 }
 
-def is_num_start(ch : int) : bool {
+def private is_num_start(ch : int) : bool {
     return ch == '-' || ch == '+' || ch == '.' || (ch >= '0' && ch <= '9')
 }
 
@@ -108,14 +109,14 @@ def parse_number(var p : PathParser) : float {
     return float(to_double(slice(p.src, start, p.pos)))
 }
 
-def parse_flag(var p : PathParser) : bool {
+def private parse_flag(var p : PathParser) : bool {
     skip_wsc(p)
     let ch = ch_at(p)
     p.pos++
     return ch == '1'
 }
 
-def parse_coord_pair(var p : PathParser) : float2 {
+def private parse_coord_pair(var p : PathParser) : float2 {
     let x = parse_number(p)
     let y = parse_number(p)
     return float2(x, y)
@@ -264,7 +265,7 @@ struct FlatPath {
     contours : array<Contour>
 }
 
-def flatten_cubic(p0, p1, p2, p3 : float2; tolerance : float; var output : array<float2>) {
+def private flatten_cubic(p0, p1, p2, p3 : float2; tolerance : float; var output : array<float2>) {
     let d1 = point_line_distance(p1, p0, p3)
     let d2 = point_line_distance(p2, p0, p3)
     if (d1 + d2 <= tolerance) {
@@ -281,7 +282,7 @@ def flatten_cubic(p0, p1, p2, p3 : float2; tolerance : float; var output : array
     flatten_cubic(p0123, p123, p23, p3, tolerance, output)
 }
 
-def point_line_distance(p, a, b : float2) : float {
+def private point_line_distance(p, a, b : float2) : float {
     let ab = b - a
     let len_sq = dot(ab, ab)
     if (len_sq < 1e-12) {
@@ -290,7 +291,7 @@ def point_line_distance(p, a, b : float2) : float {
     return abs((b.x - a.x) * (a.y - p.y) - (a.x - p.x) * (b.y - a.y)) / sqrt(len_sq)
 }
 
-def arc_to_cubics(rx0, ry0, x_rot_deg : float; large_arc, sweep : bool; from, to : float2; var output : array<float2>; tolerance : float) {
+def private arc_to_cubics(rx0, ry0, x_rot_deg : float; large_arc, sweep : bool; from, to : float2; var output : array<float2>; tolerance : float) {
     if (length(to - from) < 1e-6) {
         return
     }
@@ -362,13 +363,13 @@ def arc_to_cubics(rx0, ry0, x_rot_deg : float; large_arc, sweep : bool; from, to
     }
 }
 
-def arc_pt(x, y, rx, ry, cos_phi, sin_phi, cx, cy : float) : float2 {
+def private arc_pt(x, y, rx, ry, cos_phi, sin_phi, cx, cy : float) : float2 {
     let px = rx * x
     let py = ry * y
     return float2(cos_phi * px - sin_phi * py + cx, sin_phi * px + cos_phi * py + cy)
 }
 
-def angle_between(u, v : float2) : float {
+def private angle_between(u, v : float2) : float {
     let dot_val = clamp(dot(normalize(u), normalize(v)), -1.0, 1.0)
     var angle = acos(dot_val)
     if (u.x * v.y - u.y * v.x < 0.0) {

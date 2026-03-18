@@ -1,5 +1,6 @@
 options gen2
-options no_aot
+
+module earcut public
 
 require math
 
@@ -28,7 +29,7 @@ struct Earcut {
     inv_size : float
 }
 
-def alloc_node(var ec : Earcut; i : int; x, y : float) : int {
+def private alloc_node(var ec : Earcut; i : int; x, y : float) : int {
     let idx = length(ec.nodes)
     ec.nodes |> push(EarcutNode(
         i = i, x = x, y = y,
@@ -39,7 +40,7 @@ def alloc_node(var ec : Earcut; i : int; x, y : float) : int {
     return idx
 }
 
-def insert_node(var ec : Earcut; i : int; x, y : float; last : int) : int {
+def private insert_node(var ec : Earcut; i : int; x, y : float; last : int) : int {
     let p = alloc_node(ec, i, x, y)
     if (last < 0) {
         ec.nodes[p].prev_idx = p
@@ -53,7 +54,7 @@ def insert_node(var ec : Earcut; i : int; x, y : float; last : int) : int {
     return p
 }
 
-def remove_node(var ec : Earcut; p : int) {
+def private remove_node(var ec : Earcut; p : int) {
     ec.nodes[ec.nodes[p].prev_idx].next_idx = ec.nodes[p].next_idx
     ec.nodes[ec.nodes[p].next_idx].prev_idx = ec.nodes[p].prev_idx
     if (ec.nodes[p].prev_z >= 0) {
@@ -65,7 +66,7 @@ def remove_node(var ec : Earcut; p : int) {
 }
 
 // create a linked list from polygon vertices in the specified winding order
-def linked_list(var ec : Earcut; points : array<float2>; start, end_idx : int; clockwise : bool) : int {
+def private linked_list(var ec : Earcut; points : array<float2>; start, end_idx : int; clockwise : bool) : int {
     var last = -1
     if (clockwise) {
         for (i in range(start, end_idx)) {
@@ -88,11 +89,11 @@ def linked_list(var ec : Earcut; points : array<float2>; start, end_idx : int; c
     return ec.nodes[last].next_idx
 }
 
-def equals(ec : Earcut; p1, p2 : int) : bool {
+def private equals(ec : Earcut; p1, p2 : int) : bool {
     return ec.nodes[p1].x == ec.nodes[p2].x && ec.nodes[p1].y == ec.nodes[p2].y
 }
 
-def signed_area(points : array<float2>; start, end_idx : int) : float {
+def private signed_area(points : array<float2>; start, end_idx : int) : float {
     var sum = 0.0
     var j = end_idx - 1
     for (i in range(start, end_idx)) {
@@ -143,7 +144,7 @@ def earcut(polygon : array<float2>) : array<int> {
     return <- earcut(polygon, no_holes)
 }
 
-def earcut_linked(var ec : Earcut; ear_in : int; pass_num : int) {
+def private earcut_linked(var ec : Earcut; ear_in : int; pass_num : int) {
     if (ear_in < 0) {
         return
     }
@@ -179,7 +180,7 @@ def earcut_linked(var ec : Earcut; ear_in : int; pass_num : int) {
     }
 }
 
-def is_ear_hashed(ec : Earcut; ear : int) : bool {
+def private is_ear_hashed(ec : Earcut; ear : int) : bool {
     let a = ec.nodes[ec.nodes[ear].prev_idx]
     let b = ec.nodes[ear]
     let c = ec.nodes[ec.nodes[ear].next_idx]
@@ -241,7 +242,7 @@ def is_ear_hashed(ec : Earcut; ear : int) : bool {
     return true
 }
 
-def filter_points(var ec : Earcut; start_in : int; end_in : int) : int {
+def private filter_points(var ec : Earcut; start_in : int; end_in : int) : int {
     var start = start_in
     if (start < 0) {
         return start
@@ -270,7 +271,7 @@ def filter_points(var ec : Earcut; start_in : int; end_in : int) : int {
     return end_node
 }
 
-def index_curve(var ec : Earcut; start : int) {
+def private index_curve(var ec : Earcut; start : int) {
     var p = start
     while (true) {
         ec.nodes[p].z = z_order(ec.nodes[p].x, ec.nodes[p].y, ec.min_x, ec.min_y, ec.inv_size)
@@ -286,7 +287,7 @@ def index_curve(var ec : Earcut; start : int) {
     sort_linked(ec, start)
 }
 
-def sort_linked(var ec : Earcut; list_in : int) {
+def private sort_linked(var ec : Earcut; list_in : int) {
     var in_size = 1
     var list = list_in
     while (true) {
@@ -336,7 +337,7 @@ def sort_linked(var ec : Earcut; list_in : int) {
 }
 
 // z-order of a point given coords and inverse of the bounding box size
-def z_order(x0, y0, min_x, min_y, inv_size : float) : int {
+def private z_order(x0, y0, min_x, min_y, inv_size : float) : int {
     var x = int((x0 - min_x) * inv_size) & int(0x7FFF)
     var y = int((y0 - min_y) * inv_size) & int(0x7FFF)
     x = (x | (x << 8)) & int(0x00FF00FF)
@@ -350,11 +351,11 @@ def z_order(x0, y0, min_x, min_y, inv_size : float) : int {
     return x | (y << 1)
 }
 
-def area(p, q, r : EarcutNode) : float {
+def private area(p, q, r : EarcutNode) : float {
     return (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y)
 }
 
-def point_in_triangle(ax, ay, bx, by, cx, cy, px, py : float) : bool {
+def private point_in_triangle(ax, ay, bx, by, cx, cy, px, py : float) : bool {
     let d0 = (cx - px) * (ay - py) - (ax - px) * (cy - py)
     let d1 = (ax - px) * (by - py) - (bx - px) * (ay - py)
     let d2 = (bx - px) * (cy - py) - (cx - px) * (by - py)
@@ -362,7 +363,7 @@ def point_in_triangle(ax, ay, bx, by, cx, cy, px, py : float) : bool {
 }
 
 // eliminate holes by bridge edges
-def eliminate_holes(var ec : Earcut; points : array<float2>; hole_indices : array<int>; outer_node_in : int) : int {
+def private eliminate_holes(var ec : Earcut; points : array<float2>; hole_indices : array<int>; outer_node_in : int) : int {
     var outer_node = outer_node_in
     var queue : array<int>
     let n_holes = length(hole_indices)
@@ -387,7 +388,7 @@ def eliminate_holes(var ec : Earcut; points : array<float2>; hole_indices : arra
     return outer_node
 }
 
-def get_leftmost(ec : Earcut; start : int) : int {
+def private get_leftmost(ec : Earcut; start : int) : int {
     var p = start
     var leftmost = start
     while (true) {
@@ -402,7 +403,7 @@ def get_leftmost(ec : Earcut; start : int) : int {
     return leftmost
 }
 
-def eliminate_hole(var ec : Earcut; hole, outer_node : int) : int {
+def private eliminate_hole(var ec : Earcut; hole, outer_node : int) : int {
     let bridge = find_hole_bridge(ec, hole, outer_node)
     if (bridge < 0) {
         return outer_node
@@ -412,7 +413,7 @@ def eliminate_hole(var ec : Earcut; hole, outer_node : int) : int {
     return filter_points(ec, bridge, ec.nodes[bridge].next_idx)
 }
 
-def find_hole_bridge(ec : Earcut; hole, outer_node : int) : int {
+def private find_hole_bridge(ec : Earcut; hole, outer_node : int) : int {
     var p = outer_node
     let hx = ec.nodes[hole].x
     let hy = ec.nodes[hole].y
@@ -469,7 +470,7 @@ def find_hole_bridge(ec : Earcut; hole, outer_node : int) : int {
     return m
 }
 
-def locally_inside(ec : Earcut; a, b : int) : bool {
+def private locally_inside(ec : Earcut; a, b : int) : bool {
     if (area(ec.nodes[ec.nodes[a].prev_idx], ec.nodes[a], ec.nodes[ec.nodes[a].next_idx]) < 0.0) {
         return area(ec.nodes[a], ec.nodes[b], ec.nodes[ec.nodes[a].next_idx]) >= 0.0 && area(ec.nodes[a], ec.nodes[ec.nodes[a].prev_idx], ec.nodes[b]) >= 0.0
     } else {
@@ -477,11 +478,11 @@ def locally_inside(ec : Earcut; a, b : int) : bool {
     }
 }
 
-def sector_contains_sector(ec : Earcut; m, p : int) : bool {
+def private sector_contains_sector(ec : Earcut; m, p : int) : bool {
     return area(ec.nodes[ec.nodes[m].prev_idx], ec.nodes[m], ec.nodes[ec.nodes[p].prev_idx]) < 0.0 && area(ec.nodes[ec.nodes[p].next_idx], ec.nodes[m], ec.nodes[ec.nodes[m].next_idx]) < 0.0
 }
 
-def split_polygon(var ec : Earcut; a, b : int) : int {
+def private split_polygon(var ec : Earcut; a, b : int) : int {
     let a2 = alloc_node(ec, ec.nodes[a].i, ec.nodes[a].x, ec.nodes[a].y)
     let b2 = alloc_node(ec, ec.nodes[b].i, ec.nodes[b].x, ec.nodes[b].y)
     let an = ec.nodes[a].next_idx
