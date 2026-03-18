@@ -6,6 +6,7 @@ module opengl_cards public
 require opengl/opengl_boost
 require opengl/opengl_cache
 require daslib/safe_addr
+require math public
 require daslib/math_boost
 require card_mesh
 require strings

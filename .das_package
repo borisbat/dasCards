@@ -10,6 +10,7 @@ def package() {
     package_tag("graphics")
     package_tag("games")
     package_tag("cards")
+    package_source("github.com/borisbat/dasCards")
 }
 
 [export]
