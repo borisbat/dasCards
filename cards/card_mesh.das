@@ -76,6 +76,7 @@ struct Xform2D {
 struct CardDeck {
     components : table<string; SvgComponent>
     cards : table<string; CardMesh>
+    @safe_when_uninitialized font : GlyphFont
 }
 
 // ============================================================================
@@ -245,6 +246,7 @@ def private collect_components_recursive(node : auto; var deck : CardDeck; paren
 }
 
 def private load_svg_components(svg_file : string; var deck : CardDeck) {
+    deck.font <- load_glyph_font("cards/DejaVuSerif.ttf")
     open_xml(svg_file) <| $(doc, ok) {
         if (!ok) {
             print("Failed to open SVG: {svg_file}\n")
@@ -484,7 +486,7 @@ def private build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xf
                 if (length(text_xform_str) > 0) {
                     text_xform = xform_compose(grp_xform, parse_transform(text_xform_str))
                 }
-                tessellate_text(text_content, text_fill, text_xform, result, font_size)
+                tessellate_text(deck.font, text_content, text_fill, text_xform, result, font_size)
             }
         } elif (tag == "use") {
             resolve_use(child, deck, grp_xform, defs_node, result)
@@ -805,8 +807,8 @@ def private tessellate_path_xform(d : string; fill : float4; xform : Xform2D; va
 // Text tessellation (uses glyph_path for outline data)
 // ============================================================================
 
-def private tessellate_glyph(codepoint : int; scale : float; fill : float4; xform : Xform2D; var result : CardMesh) {
-    let flat = get_glyph_path(codepoint, scale)
+def private tessellate_glyph(font : GlyphFont; codepoint : int; scale : float; fill : float4; xform : Xform2D; var result : CardMesh) {
+    let flat = get_glyph_path(font, codepoint, scale)
     let num_contours = length(flat.contours)
     if (num_contours == 0) {
         return
@@ -857,15 +859,15 @@ def private tessellate_glyph(codepoint : int; scale : float; fill : float4; xfor
     }
 }
 
-def private tessellate_text(text : string; fill : float4; xform : Xform2D; var result : CardMesh; pixel_height : float = 22.0) {
-    let scale = get_font_scale(pixel_height)
+def private tessellate_text(font : GlyphFont; text : string; fill : float4; xform : Xform2D; var result : CardMesh; pixel_height : float = 22.0) {
+    let scale = get_font_scale(font, pixel_height)
     var cursor_x = 0.0
     for (ch in each(text)) {
         let cp = int(ch)
-        let adv = get_codepoint_advance(cp, scale)
+        let adv = get_codepoint_advance(font, cp, scale)
         if (cp > 32) {
             let glyph_xform = xform_compose(xform, xform_translate(cursor_x, 0.0))
-            tessellate_glyph(cp, scale, fill, glyph_xform, result)
+            tessellate_glyph(font, cp, scale, fill, glyph_xform, result)
         }
         cursor_x += adv
     }
@@ -876,7 +878,7 @@ def private tessellate_text(text : string; fill : float4; xform : Xform2D; var r
 // ============================================================================
 
 def load_deck(svg_file : string) : CardDeck {
-    var deck : CardDeck
+    var deck = CardDeck()
     load_svg_components(svg_file, deck)
     print("Loaded {length(deck.components)} components, {length(deck.cards)} cards\n")
     return <- deck

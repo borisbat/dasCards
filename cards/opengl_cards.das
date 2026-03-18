@@ -32,12 +32,13 @@ struct CardVertex {
 var @in @location = 0 v_xy    : float2
 var @in @location = 1 v_color : float4
 var @uniform v_mvp : float4x4
+var @uniform v_tint : float4
 var @inout f_color : float4
 var @out f_FragColor : float4
 
 [vertex_program]
 def vs_card {
-    f_color = v_color
+    f_color = float4(v_color.xyz * v_tint.xyz, v_color.w * v_tint.w)
     gl_Position = v_mvp * float4(v_xy, 0.0, 1.0)
 }
 
@@ -132,13 +133,17 @@ def card_size(scale : float) : float2 {
     return float2(CARD_DOC_WIDTH * scale, CARD_DOC_HEIGHT * scale)
 }
 
-def draw_card(renderer : CardRenderer; deck : GpuDeck; index : int; x, y, scale : float; screen_w, screen_h : int) {
+// Draw a single card with optional tint. tint.xyz multiplies color, tint.w multiplies alpha.
+// Default float4(1,1,1,1) = no tint. Use float4(0.3,0.3,0.3,1) to darken, float4(1,1,1,0.5) to fade.
+// extra: optional 4x4 transform applied after model→clip (use for 3D rotation etc.)
+def draw_card(renderer : CardRenderer; deck : GpuDeck; index : int; x, y, scale : float; screen_w, screen_h : int; tint : float4 = float4(1.0, 1.0, 1.0, 1.0); extra : float4x4 = identity4x4()) {
     if (index < 0 || index >= length(deck.cards)) {
         return
     }
     let gpu & = unsafe(deck.cards[index])
-    let mvp = make_card_mvp(x, y, scale, screen_w, screen_h)
+    let mvp = extra * make_card_mvp(x, y, scale, screen_w, screen_h)
     glUseProgram(renderer.program)
+    v_tint = tint
     for (op in gpu.draw_ops) {
         if (op.stencil_idx >= 0) {
             draw_stencil_group(gpu.stencil_groups[op.stencil_idx], mvp, renderer.program)
