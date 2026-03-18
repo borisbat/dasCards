@@ -1,0 +1,22 @@
+options gen2
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("das-cards")
+    package_author("borisbat")
+    package_description("Vector playing card rendering — SVG-based triangle mesh cards for OpenGL")
+    package_license("LGPL-2.1")
+    package_tag("graphics")
+    package_tag("games")
+    package_tag("cards")
+}
+
+[export]
+def resolve(sdk_version, version : string) {
+    if (empty(version) || version == "latest") {
+        download_branch("main")
+    } else {
+        download_tag("v{version}")
+    }
+}
