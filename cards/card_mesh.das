@@ -7,6 +7,7 @@ require strings
 require pugixml/PUGIXML_boost
 require svg_path
 require earcut
+require glyph_path
 
 // ============================================================================
 // Card mesh data types
@@ -460,6 +461,30 @@ def build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xform2D; d
                 cm.indices |> push(0); cm.indices |> push(2); cm.indices |> push(3)
                 add_mesh(result, cm)
             }
+        } elif (tag == "text") {
+            let text_content = child.text.get
+            if (length(text_content) > 0) {
+                let text_fill = get_fill_color(child, float4(0.0, 0.0, 0.0, 1.0))
+                // Parse font-size from attribute or style
+                var font_size = 22.0
+                let fs_attr = node_attr(child, "font-size", "")
+                if (length(fs_attr) > 0) {
+                    font_size = to_float(fs_attr)
+                } else {
+                    let style = node_attr(child, "style", "")
+                    let fs_idx = find(style, "font-size:")
+                    if (fs_idx >= 0) {
+                        font_size = to_float(slice(style, fs_idx + 10))
+                    }
+                }
+                // Apply text transform
+                let text_xform_str = node_attr(child, "transform", "")
+                var text_xform = grp_xform
+                if (length(text_xform_str) > 0) {
+                    text_xform = xform_compose(grp_xform, parse_transform(text_xform_str))
+                }
+                tessellate_text(text_content, text_fill, text_xform, result, font_size)
+            }
         } elif (tag == "use") {
             resolve_use(child, deck, grp_xform, defs_node, result)
         } elif (tag == "g") {
@@ -771,6 +796,76 @@ def tessellate_path_xform(d : string; fill : float4; xform : Xform2D; var result
                 }
             }
         }
+    }
+}
+
+// ============================================================================
+// Text tessellation (uses glyph_path for outline data)
+// ============================================================================
+
+def tessellate_glyph(codepoint : int; scale : float; fill : float4; xform : Xform2D; var result : CardMesh) {
+    let flat = get_glyph_path(codepoint, scale)
+    let num_contours = length(flat.contours)
+    if (num_contours == 0) {
+        return
+    }
+    // Single contour — earcut
+    if (num_contours == 1 && length(flat.contours[0].points) >= 3) {
+        var pts : array<float2>
+        for (pt in flat.contours[0].points) {
+            pts |> push(xform_point(float2(pt.x, -pt.y), xform))
+        }
+        var tris = earcut(pts)
+        if (length(tris) > 0) {
+            var cm : ColoredMesh
+            cm.color = fill
+            cm.vertices <- pts
+            cm.indices <- tris
+            add_mesh(result, cm)
+        }
+        return
+    }
+    // Multiple contours — stencil with nonzero winding
+    var sg = StencilGroup(color = fill, evenodd = false,
+        min_pt = float2(1e9, 1e9), max_pt = float2(-1e9, -1e9))
+    for (i in range(num_contours)) {
+        let n = length(flat.contours[i].points)
+        if (n < 3) {
+            continue
+        }
+        var pts : array<float2>
+        for (pt in flat.contours[i].points) {
+            let xpt = xform_point(float2(pt.x, -pt.y), xform)
+            pts |> push(xpt)
+            sg.min_pt = float2(min(sg.min_pt.x, xpt.x), min(sg.min_pt.y, xpt.y))
+            sg.max_pt = float2(max(sg.max_pt.x, xpt.x), max(sg.max_pt.y, xpt.y))
+        }
+        var cm : ColoredMesh
+        cm.color = fill
+        cm.vertices := pts
+        for (j in range(1, n - 1)) {
+            cm.indices |> push(0)
+            cm.indices |> push(j)
+            cm.indices |> push(j + 1)
+        }
+        sg.contours |> emplace(cm)
+    }
+    if (length(sg.contours) > 0) {
+        add_stencil_group(result, sg)
+    }
+}
+
+def tessellate_text(text : string; fill : float4; xform : Xform2D; var result : CardMesh; pixel_height : float = 22.0) {
+    let scale = get_font_scale(pixel_height)
+    var cursor_x = 0.0
+    for (ch in each(text)) {
+        let cp = int(ch)
+        let adv = get_codepoint_advance(cp, scale)
+        if (cp > 32) {
+            let glyph_xform = xform_compose(xform, xform_translate(cursor_x, 0.0))
+            tessellate_glyph(cp, scale, fill, glyph_xform, result)
+        }
+        cursor_x += adv
     }
 }
 
