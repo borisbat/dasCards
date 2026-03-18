@@ -211,7 +211,7 @@ def upload_card(card : CardMesh) : GpuCard {
 
 def is_playing_card(name : string) : bool {
     // Filter to actual playing cards: {suit}_{rank}, joker_black, joker_red, back
-    if (name == "back" || name == "joker_black" || name == "joker_red") {
+    if (name == "back" || name == "alternate-back" || name == "joker_black" || name == "joker_red") {
         return true
     }
     return starts_with(name, "club_") || starts_with(name, "diamond_") || starts_with(name, "heart_") || starts_with(name, "spade_")

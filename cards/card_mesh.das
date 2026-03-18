@@ -387,6 +387,30 @@ def resolve_use(use_node : auto; deck : CardDeck; grp_xform : Xform2D; defs_node
                     let eo = find(sty, "fill-rule:evenodd") >= 0
                     tessellate_path_xform(d, path_fill, use_xform, result, eo)
                 }
+            } elif (tag == "rect") {
+                let rect_fill = get_fill_color(found.node, fill)
+                if (rect_fill.w > 0.0) {
+                    let rx = to_float(node_attr(found.node, "x", "0"))
+                    let ry = to_float(node_attr(found.node, "y", "0"))
+                    let rw = to_float(node_attr(found.node, "width", "0"))
+                    let rh = to_float(node_attr(found.node, "height", "0"))
+                    if (rw > 0.0 && rh > 0.0) {
+                        var rect_xform = use_xform
+                        let rect_xform_str = node_attr(found.node, "transform", "")
+                        if (length(rect_xform_str) > 0) {
+                            rect_xform = xform_compose(use_xform, parse_transform(rect_xform_str))
+                        }
+                        var cm : ColoredMesh
+                        cm.color = rect_fill
+                        cm.vertices |> push(xform_point(float2(rx, ry), rect_xform))
+                        cm.vertices |> push(xform_point(float2(rx + rw, ry), rect_xform))
+                        cm.vertices |> push(xform_point(float2(rx + rw, ry + rh), rect_xform))
+                        cm.vertices |> push(xform_point(float2(rx, ry + rh), rect_xform))
+                        cm.indices |> push(0); cm.indices |> push(1); cm.indices |> push(2)
+                        cm.indices |> push(0); cm.indices |> push(2); cm.indices |> push(3)
+                        add_mesh(result, cm)
+                    }
+                }
             } else {
                 var sub = build_card_mesh(found.node, deck, use_xform, defs_node)
                 merge_sub_mesh(result, sub)
