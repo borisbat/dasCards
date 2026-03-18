@@ -3,7 +3,7 @@ require fio
 
 [export]
 def initialize(project_path : string) {
-    let paths = ["svg_path", "earcut", "glyph_path", "card_mesh", "card_render"]
+    let paths = ["svg_path", "earcut", "glyph_path", "card_mesh", "opengl_cards"]
     for (path in paths) {
         register_native_path("cards", "{path}", "{project_path}/cards/{path}.das")
     }
