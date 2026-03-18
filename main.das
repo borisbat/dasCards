@@ -18,6 +18,7 @@ require strings
 require daslib/strings_boost
 require daslib/safe_addr
 require daslib/math_boost
+require fio
 
 require cards/opengl_cards
 
@@ -52,10 +53,14 @@ var back_card_idx = -1                // index of "back" card for reverse face
 // Solo debug mode — draws only the focused card, no grid
 var solo_mode = false
 var solo_card_idx = -1
+var @live solo_zoom = 0.85
+var @live solo_offset = float2(0.0, 0.0)
 
 // Mouse state
 var mouse_was_pressed = false
 var rmouse_was_pressed = false
+var last_click_x = 0.0
+var last_click_y = 0.0
 
 // ============================================================================
 // Layout helpers
@@ -141,14 +146,19 @@ def card_grid_pos(lay : CardLayout; row, col : int; num_in_row : int) : float2 {
 
 struct CmdFocusArgs {
     card : string = ""
+    zoom : float = 0.85
+    offset_x : float = 0.0
+    offset_y : float = 0.0
 }
 
-[live_command(description="Focus on a single card by name. Empty to show all. Draws solo — no grid.")]
+[live_command(description="Focus on a single card by name. Empty to show all. zoom=scale, offset_x/offset_y=pan.")]
 def cmd_focus(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<CmdFocusArgs>)
     if (length(args.card) == 0) {
         solo_mode = false
         solo_card_idx = -1
+        solo_zoom = 0.85
+        solo_offset = float2(0.0, 0.0)
         zoom_target = 0.0
         return JV("showing all cards")
     }
@@ -156,6 +166,8 @@ def cmd_focus(input : JsonValue?) : JsonValue? {
     if (idx >= 0) {
         solo_mode = true
         solo_card_idx = idx
+        solo_zoom = args.zoom
+        solo_offset = float2(args.offset_x, args.offset_y)
         return JV("focused on {args.card}")
     }
     return JV("card not found: {args.card}")
@@ -164,6 +176,76 @@ def cmd_focus(input : JsonValue?) : JsonValue? {
 [live_command(description="List loaded card names")]
 def cmd_list_cards(input : JsonValue?) : JsonValue? {
     return JV(gpu_deck.names)
+}
+
+[live_command(description="Get last click coordinates (screen space)")]
+def cmd_click_pos(input : JsonValue?) : JsonValue? {
+    return JV("x={last_click_x} y={last_click_y} display={display_w}x{display_h}")
+}
+
+struct CmdDebugDrawArgs {
+    skip : int = -1
+    only : int = -1
+}
+
+[live_command(description="Debug: skip or isolate draw ops. skip=N skips op N, only=N draws only op N, both -1 resets.")]
+def cmd_debug_draw(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdDebugDrawArgs>)
+    debug_skip_op = args.skip
+    debug_only_op = args.only
+    return JV("skip={debug_skip_op} only={debug_only_op}")
+}
+
+struct CmdSaveViewArgs {
+    file : string = "view.json"
+}
+
+struct ViewState {
+    card_idx : int
+    zoom : double
+    offset_x : double
+    offset_y : double
+}
+
+[live_command(description="Save current view position to a JSON file")]
+def cmd_save_view(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdSaveViewArgs>)
+    var fname = args.file
+    if (empty(fname)) { fname = "view.json"; }
+    let text = "\{\"card_idx\":{solo_card_idx},\"zoom\":{solo_zoom},\"offset_x\":{solo_offset.x},\"offset_y\":{solo_offset.y}\}"
+    fopen(fname, "wb") <| $(f) {
+        if (f != null) {
+            fwrite(f, text)
+        }
+    }
+    return JV("saved to {fname}: {text}")
+}
+
+[live_command(description="Load view position from a JSON file")]
+def cmd_load_view(input : JsonValue?) : JsonValue? {
+    let args = from_JV(input, type<CmdSaveViewArgs>)
+    var fname = args.file
+    if (empty(fname)) { fname = "view.json"; }
+    var text = ""
+    fopen(fname, "rb") <| $(f) {
+        if (f != null) {
+            text = fread(f)
+        }
+    }
+    if (empty(text)) {
+        return JV("file not found: {fname}")
+    }
+    var error = ""
+    var data = read_json(text, error)
+    if (data == null) {
+        return JV("parse error: {error}")
+    }
+    let vs = from_JV(data, type<ViewState>)
+    solo_mode = true
+    solo_card_idx = vs.card_idx
+    solo_zoom = float(vs.zoom)
+    solo_offset = float2(float(vs.offset_x), float(vs.offset_y))
+    return JV("loaded from {fname}: card={solo_card_idx} zoom={solo_zoom}")
 }
 
 // ============================================================================
@@ -205,11 +287,30 @@ def update() {
     let rclicked = rmouse_down && !rmouse_was_pressed
     rmouse_was_pressed = rmouse_down
 
-    // Right-click toggles 3D rotation when zoomed
-    if (rclicked && zoom_target > 0.5) {
-        rotating = !rotating
-        if (!rotating) {
-            rotate_angle = 0.0
+    // Right-click: in solo mode zoom 2x on click point, otherwise toggle 3D rotation
+    if (rclicked) {
+        if (solo_mode && solo_card_idx >= 0) {
+            var mx, my : double
+            glfwGetCursorPos(live_window, safe_addr(mx), safe_addr(my))
+            let mxf = float(mx)
+            let myf = float(my)
+            last_click_x = mxf
+            last_click_y = myf
+            // offset so the clicked point becomes the center
+            let cx = float(display_w) * 0.5
+            let cy = float(display_h) * 0.5
+            // adjust existing offset: new_offset = (old_offset + center - click) * 2
+            // but simpler: just accumulate the delta and halve the zoom
+            solo_offset = float2(
+                (solo_offset.x + cx - mxf) * 2.0,
+                (solo_offset.y + cy - myf) * 2.0
+            )
+            solo_zoom *= 2.0
+        } elif (zoom_target > 0.5) {
+            rotating = !rotating
+            if (!rotating) {
+                rotate_angle = 0.0
+            }
         }
     }
 
@@ -218,6 +319,8 @@ def update() {
         glfwGetCursorPos(live_window, safe_addr(mx), safe_addr(my))
         let mxf = float(mx)
         let myf = float(my)
+        last_click_x = mxf
+        last_click_y = myf
 
         if (zoom_target > 0.5) {
             // clicking while zoomed → start unzoom
@@ -270,10 +373,10 @@ def update() {
 
     // Solo debug mode — just one card centered, no grid
     if (solo_mode && solo_card_idx >= 0) {
-        let solo_scale = min(float(display_w) / CARD_DOC_WIDTH, float(display_h) / CARD_DOC_HEIGHT) * 0.85
+        let solo_scale = min(float(display_w) / CARD_DOC_WIDTH, float(display_h) / CARD_DOC_HEIGHT) * solo_zoom
         let solo_cs = card_size(solo_scale)
-        let sx = (float(display_w) - solo_cs.x) * 0.5
-        let sy = (float(display_h) - solo_cs.y) * 0.5
+        let sx = (float(display_w) - solo_cs.x) * 0.5 + solo_offset.x
+        let sy = (float(display_h) - solo_cs.y) * 0.5 + solo_offset.y
         draw_card(renderer, gpu_deck, solo_card_idx, sx, sy, solo_scale, display_w, display_h)
         glDisable(GL_BLEND)
         live_end_frame()
