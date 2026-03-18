@@ -413,14 +413,14 @@ def resolve_use(use_node : auto; deck : CardDeck; grp_xform : Xform2D; defs_node
                     }
                 }
             } else {
-                var sub = build_card_mesh(found.node, deck, use_xform, defs_node)
+                var sub = build_card_mesh(found.node, deck, use_xform, defs_node, fill)
                 merge_sub_mesh(result, sub)
             }
         }
     }
 }
 
-def build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xform2D; defs_node : auto) : CardMesh {
+def build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xform2D; defs_node : auto; parent_fill : float4 = float4(0.0, 0.0, 0.0, 1.0)) : CardMesh {
     var result : CardMesh
     let grp_xform_str = node_attr(card_node, "transform", "")
     let grp_xform = length(grp_xform_str) > 0 ? xform_compose(parent_xform, parse_transform(grp_xform_str)) : parent_xform
@@ -430,13 +430,13 @@ def build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xform2D; d
         if (tag == "path") {
             let d = node_attr(child, "d", "")
             if (length(d) > 0) {
-                let fill = get_fill_color(child, float4(0.0, 0.0, 0.0, 1.0))
+                let fill = get_fill_color(child, parent_fill)
                 let style = node_attr(child, "style", "")
                 let eo = find(style, "fill-rule:evenodd") >= 0
                 tessellate_path_xform(d, fill, grp_xform, result, eo)
             }
         } elif (tag == "rect") {
-            let fill = get_fill_color(child, float4(1.0, 1.0, 1.0, 1.0))
+            let fill = get_fill_color(child, parent_fill)
             if (fill.w <= 0.0) {
                 continue
             }
@@ -464,7 +464,7 @@ def build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xform2D; d
         } elif (tag == "text") {
             let text_content = child.text.get
             if (length(text_content) > 0) {
-                let text_fill = get_fill_color(child, float4(0.0, 0.0, 0.0, 1.0))
+                let text_fill = get_fill_color(child, parent_fill)
                 // Parse font-size from attribute or style
                 var font_size = 22.0
                 let fs_attr = node_attr(child, "font-size", "")
@@ -488,7 +488,8 @@ def build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xform2D; d
         } elif (tag == "use") {
             resolve_use(child, deck, grp_xform, defs_node, result)
         } elif (tag == "g") {
-            var sub = build_card_mesh(child, deck, grp_xform, defs_node)
+            let g_fill = get_fill_color(child, parent_fill)
+            var sub = build_card_mesh(child, deck, grp_xform, defs_node, g_fill)
             merge_sub_mesh(result, sub)
         }
     }
