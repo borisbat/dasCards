@@ -130,3 +130,59 @@ def test_parse_transform_scale_uniform(t : T?) {
     // uniform scale: d should also be 0.5
     t |> success(abs(xf.d - 0.5) < 0.01)
 }
+
+[test]
+def test_load_deck_spade_queen_has_color(t : T?) {
+    // Regression: spade_queen was missing colored polygons (queen_2 uses <polygon>, not <path>)
+    let f = fopen("cards/svg-cards.svg", "rb")
+    if (f == null) {
+        return
+    }
+    fclose(f)
+    let deck = load_deck("cards/svg-cards.svg")
+    var found = false
+    deck.cards |> get("spade_queen") <| $(card) {
+        found = true
+        // spade_queen should have many meshes (colored polygons from queen_2 face artwork)
+        let total = length(card.meshes) + length(card.stencil_groups)
+        t |> success(total > 5, "spade_queen should have many draw ops, got {total}")
+    }
+    t |> success(found, "spade_queen should exist in deck")
+}
+
+[test]
+def test_load_deck_circle_elements(t : T?) {
+    // Cards use <circle> elements for decorative dots on face cards
+    let f = fopen("cards/svg-cards.svg", "rb")
+    if (f == null) {
+        return
+    }
+    fclose(f)
+    let deck = load_deck("cards/svg-cards.svg")
+    // heart_queen has many circles — check it has substantial geometry
+    var found = false
+    deck.cards |> get("heart_queen") <| $(card) {
+        found = true
+        let total = length(card.meshes) + length(card.stencil_groups)
+        t |> success(total > 10, "heart_queen should have many draw ops (circles + paths), got {total}")
+    }
+    t |> success(found, "heart_queen should exist in deck")
+}
+
+[test]
+def test_load_deck_polyline_elements(t : T?) {
+    // king_2, king_3, jack_3 use <polyline> elements
+    let f = fopen("cards/svg-cards.svg", "rb")
+    if (f == null) {
+        return
+    }
+    fclose(f)
+    let deck = load_deck("cards/svg-cards.svg")
+    var found = false
+    deck.cards |> get("spade_king") <| $(card) {
+        found = true
+        let total = length(card.meshes) + length(card.stencil_groups)
+        t |> success(total > 5, "spade_king should have draw ops, got {total}")
+    }
+    t |> success(found, "spade_king should exist in deck")
+}

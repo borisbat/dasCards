@@ -185,3 +185,54 @@ def test_flatten_tight_tolerance(t : T?) {
     t |> success(length(tight.contours[0].points) > length(loose.contours[0].points),
         "tighter tolerance should produce more points")
 }
+
+[test]
+def test_polygon_points_format(t : T?) {
+    // SVG <polygon points="..."> converted to "M points Z"
+    let path = parse_svg_path("M 235.16,276.6 234.35,280.56 236.21,285.78 235.89,284.38 Z")
+    t |> equal(length(path.commands), 5) // M + 3 implicit L + Z
+    t |> equal(int(path.commands[0].cmd), int(SvgCmd.MoveTo))
+    t |> success(abs(path.commands[0].pts[0].x - 235.16) < 0.01)
+    t |> equal(int(path.commands[1].cmd), int(SvgCmd.LineTo))
+    t |> equal(int(path.commands[4].cmd), int(SvgCmd.ClosePath))
+    let flat = flatten_svg_path(path)
+    t |> equal(length(flat.contours), 1)
+    t |> equal(flat.contours[0].closed, true)
+    t |> success(length(flat.contours[0].points) >= 4)
+}
+
+[test]
+def test_polyline_points_format(t : T?) {
+    // SVG <polyline points="..."> converted to "M points" (no Z)
+    let path = parse_svg_path("M 10,20 30,40 50,60")
+    t |> equal(length(path.commands), 3) // M + 2 implicit L
+    let flat = flatten_svg_path(path)
+    t |> equal(length(flat.contours), 1)
+    t |> equal(flat.contours[0].closed, false)
+}
+
+[test]
+def test_space_separated_points(t : T?) {
+    // polygon points use spaces between coordinate pairs
+    let path = parse_svg_path("M 100.5,200.3 300.1,400.7 Z")
+    t |> equal(length(path.commands), 3) // M + implicit L + Z
+    t |> success(abs(path.commands[0].pts[0].x - 100.5) < 0.01)
+    t |> success(abs(path.commands[1].pts[0].x - 300.1) < 0.01)
+    t |> success(abs(path.commands[1].pts[0].y - 400.7) < 0.01)
+}
+
+[test]
+def test_circle_as_cubic_beziers(t : T?) {
+    // Circle approximated as 4 cubic bezier arcs — verify it flattens to a closed loop
+    let cx = 50.0f
+    let cy = 50.0f
+    let r = 25.0f
+    let k = r * 0.5522847498f
+    let d = "M {cx + r},{cy} C {cx + r},{cy + k} {cx + k},{cy + r} {cx},{cy + r} C {cx - k},{cy + r} {cx - r},{cy + k} {cx - r},{cy} C {cx - r},{cy - k} {cx - k},{cy - r} {cx},{cy - r} C {cx + k},{cy - r} {cx + r},{cy - k} {cx + r},{cy} Z"
+    let path = parse_svg_path(d)
+    t |> equal(length(path.commands), 6) // M + 4 C + Z
+    let flat = flatten_svg_path(path, 0.5)
+    t |> equal(length(flat.contours), 1)
+    t |> equal(flat.contours[0].closed, true)
+    t |> success(length(flat.contours[0].points) > 12, "circle should have many points")
+}

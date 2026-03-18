@@ -271,6 +271,41 @@ def private load_svg_components(svg_file : string; var deck : CardDeck) {
     }
 }
 
+def private polygon_points_to_path(points_str : string) : string {
+    // Convert SVG <polygon points="x1,y1 x2,y2 ..."/> to path "M x1,y1 L x2,y2 ... Z"
+    return "M {points_str} Z"
+}
+
+def private polyline_points_to_path(points_str : string) : string {
+    // Like polygon but not closed
+    return "M {points_str}"
+}
+
+def private circle_to_path(cx, cy, r : float) : string {
+    // Approximate circle as 4 cubic bezier arcs (standard SVG circle→path)
+    let k = r * 0.5522847498f  // (4/3)(sqrt(2)-1)
+    return "M {cx + r},{cy} C {cx + r},{cy + k} {cx + k},{cy + r} {cx},{cy + r} C {cx - k},{cy + r} {cx - r},{cy + k} {cx - r},{cy} C {cx - r},{cy - k} {cx - k},{cy - r} {cx},{cy - r} C {cx + k},{cy - r} {cx + r},{cy - k} {cx + r},{cy} Z"
+}
+
+def private collect_path_element(child : auto; var comp : SvgComponent; parent_fill : float4; parent_xform : Xform2D; d : string) {
+    var sp = SvgShapePath()
+    sp.d = clone_string(d)
+    let style = node_attr(child, "style", "")
+    let fill_attr = node_attr(child, "fill", "")
+    sp.has_explicit_fill = (length(style) > 0 && find(style, "fill:") >= 0) || length(fill_attr) > 0
+    sp.fill = get_fill_color(child, parent_fill)
+    if (find(style, "fill-rule:evenodd") >= 0) {
+        sp.evenodd = true
+    }
+    let path_xform_str = node_attr(child, "transform", "")
+    if (length(path_xform_str) > 0) {
+        sp.xform = xform_compose(parent_xform, parse_transform(path_xform_str))
+    } else {
+        sp.xform = parent_xform
+    }
+    comp.paths |> emplace(sp)
+}
+
 def private collect_paths(node : auto; var comp : SvgComponent; parent_fill : float4; parent_xform : Xform2D = Xform2D()) {
     // Iterate ALL children in DOM order to preserve SVG paint order
     for (child in each_child(node)) {
@@ -278,23 +313,27 @@ def private collect_paths(node : auto; var comp : SvgComponent; parent_fill : fl
         if (tag == "path") {
             let d = node_attr(child, "d", "")
             if (length(d) > 0) {
-                var sp = SvgShapePath()
-                sp.d = clone_string(d)
-                let style = node_attr(child, "style", "")
-                let fill_attr = node_attr(child, "fill", "")
-                sp.has_explicit_fill = (length(style) > 0 && find(style, "fill:") >= 0) || length(fill_attr) > 0
-                sp.fill = get_fill_color(child, parent_fill)
-                if (find(style, "fill-rule:evenodd") >= 0) {
-                    sp.evenodd = true
-                }
-                let path_xform_str = node_attr(child, "transform", "")
-                if (length(path_xform_str) > 0) {
-                    sp.xform = xform_compose(parent_xform, parse_transform(path_xform_str))
-                } else {
-                    sp.xform = parent_xform
-                }
-                comp.paths |> emplace(sp)
+                collect_path_element(child, comp, parent_fill, parent_xform, d)
             }
+        } elif (tag == "polygon") {
+            let points_str = node_attr(child, "points", "")
+            if (length(points_str) > 0) {
+                collect_path_element(child, comp, parent_fill, parent_xform, polygon_points_to_path(points_str))
+            }
+        } elif (tag == "polyline") {
+            let points_str = node_attr(child, "points", "")
+            if (length(points_str) > 0) {
+                collect_path_element(child, comp, parent_fill, parent_xform, polyline_points_to_path(points_str))
+            }
+        } elif (tag == "circle") {
+            let cx = to_float(node_attr(child, "cx", "0"))
+            let cy = to_float(node_attr(child, "cy", "0"))
+            let r = to_float(node_attr(child, "r", "0"))
+            if (r > 0.0) {
+                collect_path_element(child, comp, parent_fill, parent_xform, circle_to_path(cx, cy, r))
+            }
+        } elif (tag == "line") {
+            // Lines have no fill — they're stroke-only. Skip in fill-based renderer.
         } elif (tag == "g") {
             let fill = get_fill_color(child, parent_fill)
             let g_xform_str = node_attr(child, "transform", "")
@@ -391,6 +430,14 @@ def private resolve_use(use_node : auto; deck : CardDeck; grp_xform : Xform2D; d
                     let eo = find(sty, "fill-rule:evenodd") >= 0
                     tessellate_path_xform(d, path_fill, use_xform, result, eo)
                 }
+            } elif (tag == "polygon") {
+                let points_str = node_attr(found.node, "points", "")
+                if (length(points_str) > 0) {
+                    let poly_fill = get_fill_color(found.node, fill)
+                    let sty = node_attr(found.node, "style", "")
+                    let eo = find(sty, "fill-rule:evenodd") >= 0
+                    tessellate_path_xform(polygon_points_to_path(points_str), poly_fill, use_xform, result, eo)
+                }
             } elif (tag == "rect") {
                 let rect_fill = get_fill_color(found.node, fill)
                 if (rect_fill.w > 0.0) {
@@ -438,6 +485,35 @@ def private build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xf
                 let eo = find(style, "fill-rule:evenodd") >= 0
                 tessellate_path_xform(d, fill, grp_xform, result, eo)
             }
+        } elif (tag == "polygon") {
+            let points_str = node_attr(child, "points", "")
+            if (length(points_str) > 0) {
+                let fill = get_fill_color(child, parent_fill)
+                let style = node_attr(child, "style", "")
+                let eo = find(style, "fill-rule:evenodd") >= 0
+                let poly_d = polygon_points_to_path(points_str)
+                tessellate_path_xform(poly_d, fill, grp_xform, result, eo)
+            }
+        } elif (tag == "polyline") {
+            let points_str = node_attr(child, "points", "")
+            if (length(points_str) > 0) {
+                let fill = get_fill_color(child, parent_fill)
+                let style = node_attr(child, "style", "")
+                let eo = find(style, "fill-rule:evenodd") >= 0
+                tessellate_path_xform(polyline_points_to_path(points_str), fill, grp_xform, result, eo)
+            }
+        } elif (tag == "circle") {
+            let cx = to_float(node_attr(child, "cx", "0"))
+            let cy = to_float(node_attr(child, "cy", "0"))
+            let r = to_float(node_attr(child, "r", "0"))
+            if (r > 0.0) {
+                let fill = get_fill_color(child, parent_fill)
+                if (fill.w > 0.0) {
+                    tessellate_path_xform(circle_to_path(cx, cy, r), fill, grp_xform, result)
+                }
+            }
+        } elif (tag == "line") {
+            // Lines are stroke-only — skip in fill-based renderer
         } elif (tag == "rect") {
             let fill = get_fill_color(child, parent_fill)
             if (fill.w <= 0.0) {

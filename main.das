@@ -49,6 +49,10 @@ var @live rotate_speed = 0.8
 var @live rotate_tilt = 0.12          // slight X-axis tilt (radians)
 var back_card_idx = -1                // index of "back" card for reverse face
 
+// Solo debug mode — draws only the focused card, no grid
+var solo_mode = false
+var solo_card_idx = -1
+
 // Mouse state
 var mouse_was_pressed = false
 var rmouse_was_pressed = false
@@ -139,27 +143,20 @@ struct CmdFocusArgs {
     card : string = ""
 }
 
-[live_command(description="Focus on a single card by name. Empty to show all.")]
+[live_command(description="Focus on a single card by name. Empty to show all. Draws solo — no grid.")]
 def cmd_focus(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<CmdFocusArgs>)
     if (length(args.card) == 0) {
+        solo_mode = false
+        solo_card_idx = -1
         zoom_target = 0.0
         return JV("showing all cards")
     }
     let idx = find_card(gpu_deck, args.card)
     if (idx >= 0) {
-        // find row/col for the card
-        for (r in range(length(rows))) {
-            for (c in range(length(rows[r]))) {
-                if (rows[r][c] == idx) {
-                    zoom_card = idx
-                    zoom_row = r
-                    zoom_col = c
-                    zoom_target = 1.0
-                    return JV("focused on {args.card}")
-                }
-            }
-        }
+        solo_mode = true
+        solo_card_idx = idx
+        return JV("focused on {args.card}")
     }
     return JV("card not found: {args.card}")
 }
@@ -270,6 +267,18 @@ def update() {
     let zoom_cs = card_size(zoom_scale)
     let center_x = (float(display_w) - zoom_cs.x) * 0.5
     let center_y = (float(display_h) - zoom_cs.y) * 0.5
+
+    // Solo debug mode — just one card centered, no grid
+    if (solo_mode && solo_card_idx >= 0) {
+        let solo_scale = min(float(display_w) / CARD_DOC_WIDTH, float(display_h) / CARD_DOC_HEIGHT) * 0.85
+        let solo_cs = card_size(solo_scale)
+        let sx = (float(display_w) - solo_cs.x) * 0.5
+        let sy = (float(display_h) - solo_cs.y) * 0.5
+        draw_card(renderer, gpu_deck, solo_card_idx, sx, sy, solo_scale, display_w, display_h)
+        glDisable(GL_BLEND)
+        live_end_frame()
+        return
+    }
 
     // Draw all cards
     for (r in range(length(rows))) {
