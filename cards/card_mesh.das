@@ -332,100 +332,116 @@ def merge_sub_mesh(var result : CardMesh; var sub : CardMesh) {
     }
 }
 
+def resolve_use(use_node : auto; deck : CardDeck; grp_xform : Xform2D; defs_node : auto; var result : CardMesh) {
+    var href = node_attr(use_node, "xlink:href", "")
+    if (length(href) == 0) {
+        href = node_attr(use_node, "href", "")
+    }
+    if (length(href) == 0 || character_at(href, 0) != '#') {
+        return
+    }
+    let comp_id = slice(href, 1)
+    let style = node_attr(use_node, "style", "")
+    // SVG <use> x,y create an additional translate(x,y) applied after the transform
+    let use_x = to_float(node_attr(use_node, "x", "0"))
+    let use_y = to_float(node_attr(use_node, "y", "0"))
+    let xy_translate = xform_translate(use_x, use_y)
+    let use_xform_str = node_attr(use_node, "transform", "")
+    var use_local = Xform2D()
+    if (length(use_xform_str) > 0) {
+        use_local = xform_compose(parse_transform(use_xform_str), xy_translate)
+    } else {
+        use_local = xy_translate
+    }
+    let use_xform = xform_compose(grp_xform, use_local)
+    var fill = float4(0.0, 0.0, 0.0, 1.0)
+    if (length(style) > 0 && find(style, "fill:") >= 0) {
+        fill = extract_fill_from_style(style)
+    }
+    var resolved = false
+    deck.components |> get(comp_id) <| $(comp) {
+        resolved = true
+        for (sp in comp.paths) {
+            var path_fill = sp.fill
+            if (fill.w > 0.0 && !sp.has_explicit_fill) {
+                path_fill = fill
+            }
+            if (path_fill.w <= 0.0) {
+                path_fill = fill
+            }
+            let final_xform = xform_compose(use_xform, sp.xform)
+            tessellate_path_xform(sp.d, path_fill, final_xform, result, sp.evenodd)
+        }
+    }
+    // Fallback: search XML tree via XPath for any element with matching id
+    if (!resolved) {
+        let xpath = "//*[@id='{comp_id}']"
+        let found = select_node(defs_node, xpath)
+        if (found.ok && found.node.ok) {
+            let tag = found.node.name
+            if (tag == "path") {
+                let d = node_attr(found.node, "d", "")
+                if (length(d) > 0) {
+                    let path_fill = get_fill_color(found.node, fill)
+                    let sty = node_attr(found.node, "style", "")
+                    let eo = find(sty, "fill-rule:evenodd") >= 0
+                    tessellate_path_xform(d, path_fill, use_xform, result, eo)
+                }
+            } else {
+                var sub = build_card_mesh(found.node, deck, use_xform, defs_node)
+                merge_sub_mesh(result, sub)
+            }
+        }
+    }
+}
+
 def build_card_mesh(card_node : auto; deck : CardDeck; parent_xform : Xform2D; defs_node : auto) : CardMesh {
     var result : CardMesh
     let grp_xform_str = node_attr(card_node, "transform", "")
     let grp_xform = length(grp_xform_str) > 0 ? xform_compose(parent_xform, parse_transform(grp_xform_str)) : parent_xform
-    // inline paths
-    for (path_node in each_child(card_node, "path")) {
-        let d = node_attr(path_node, "d", "")
-        if (length(d) > 0) {
-            let fill = get_fill_color(path_node, float4(0.0, 0.0, 0.0, 1.0))
-            let style = node_attr(path_node, "style", "")
-            let eo = find(style, "fill-rule:evenodd") >= 0
-            tessellate_path_xform(d, fill, grp_xform, result, eo)
-        }
-    }
-    // inline <rect> elements (used as white masks on face cards)
-    for (rect_node in each_child(card_node, "rect")) {
-        let fill = get_fill_color(rect_node, float4(1.0, 1.0, 1.0, 1.0))
-        if (fill.w <= 0.0) {
-            continue
-        }
-        let rx = to_float(node_attr(rect_node, "x", "0"))
-        let ry = to_float(node_attr(rect_node, "y", "0"))
-        let rw = to_float(node_attr(rect_node, "width", "0"))
-        let rh = to_float(node_attr(rect_node, "height", "0"))
-        if (rw > 0.0 && rh > 0.0) {
-            var cm : ColoredMesh
-            cm.color = fill
-            cm.vertices |> push(xform_point(float2(rx, ry), grp_xform))
-            cm.vertices |> push(xform_point(float2(rx + rw, ry), grp_xform))
-            cm.vertices |> push(xform_point(float2(rx + rw, ry + rh), grp_xform))
-            cm.vertices |> push(xform_point(float2(rx, ry + rh), grp_xform))
-            cm.indices |> push(0); cm.indices |> push(1); cm.indices |> push(2)
-            cm.indices |> push(0); cm.indices |> push(2); cm.indices |> push(3)
-            add_mesh(result, cm)
-        }
-    }
-    // <use> references — SVG spec: effective transform = transform_attr * translate(x, y)
-    for (use_node in each_child(card_node, "use")) {
-        var href = node_attr(use_node, "xlink:href", "")
-        if (length(href) == 0) {
-            href = node_attr(use_node, "href", "")
-        }
-        if (length(href) > 0 && character_at(href, 0) == '#') {
-            let comp_id = slice(href, 1)
-            let style = node_attr(use_node, "style", "")
-            // SVG <use> x,y create an additional translate(x,y) applied after the transform
-            let use_x = to_float(node_attr(use_node, "x", "0"))
-            let use_y = to_float(node_attr(use_node, "y", "0"))
-            let xy_translate = xform_translate(use_x, use_y)
-            let use_xform_str = node_attr(use_node, "transform", "")
-            var use_local = Xform2D()
-            if (length(use_xform_str) > 0) {
-                use_local = xform_compose(parse_transform(use_xform_str), xy_translate)
-            } else {
-                use_local = xy_translate
+    // Iterate ALL children in DOM order to preserve SVG paint order
+    for (child in each_child(card_node)) {
+        let tag = child.name
+        if (tag == "path") {
+            let d = node_attr(child, "d", "")
+            if (length(d) > 0) {
+                let fill = get_fill_color(child, float4(0.0, 0.0, 0.0, 1.0))
+                let style = node_attr(child, "style", "")
+                let eo = find(style, "fill-rule:evenodd") >= 0
+                tessellate_path_xform(d, fill, grp_xform, result, eo)
             }
-            let use_xform = xform_compose(grp_xform, use_local)
-            var fill = float4(0.0, 0.0, 0.0, 1.0)
-            if (length(style) > 0 && find(style, "fill:") >= 0) {
-                fill = extract_fill_from_style(style)
+        } elif (tag == "rect") {
+            let fill = get_fill_color(child, float4(1.0, 1.0, 1.0, 1.0))
+            if (fill.w <= 0.0) {
+                continue
             }
-            var resolved = false
-            deck.components |> get(comp_id) <| $(comp) {
-                resolved = true
-                for (sp in comp.paths) {
-                    // SVG fill inheritance: use-level fill overrides inherited fills,
-                    // but not explicit fills set on the element itself
-                    var path_fill = sp.fill
-                    if (fill.w > 0.0 && !sp.has_explicit_fill) {
-                        path_fill = fill
-                    }
-                    if (path_fill.w <= 0.0) {
-                        path_fill = fill
-                    }
-                    let final_xform = xform_compose(use_xform, sp.xform)
-                    tessellate_path_xform(sp.d, path_fill, final_xform, result, sp.evenodd)
+            let rx = to_float(node_attr(child, "x", "0"))
+            let ry = to_float(node_attr(child, "y", "0"))
+            let rw = to_float(node_attr(child, "width", "0"))
+            let rh = to_float(node_attr(child, "height", "0"))
+            if (rw > 0.0 && rh > 0.0) {
+                // Apply rect-level transform if present
+                var rect_xform = grp_xform
+                let rect_xform_str = node_attr(child, "transform", "")
+                if (length(rect_xform_str) > 0) {
+                    rect_xform = xform_compose(grp_xform, parse_transform(rect_xform_str))
                 }
+                var cm : ColoredMesh
+                cm.color = fill
+                cm.vertices |> push(xform_point(float2(rx, ry), rect_xform))
+                cm.vertices |> push(xform_point(float2(rx + rw, ry), rect_xform))
+                cm.vertices |> push(xform_point(float2(rx + rw, ry + rh), rect_xform))
+                cm.vertices |> push(xform_point(float2(rx, ry + rh), rect_xform))
+                cm.indices |> push(0); cm.indices |> push(1); cm.indices |> push(2)
+                cm.indices |> push(0); cm.indices |> push(2); cm.indices |> push(3)
+                add_mesh(result, cm)
             }
-            // Fallback: compound component (has <use> children itself)
-            // Search XML tree via XPath
-            if (!resolved) {
-                let xpath = "//g[@id='{comp_id}']"
-                let found = select_node(defs_node, xpath)
-                if (found.ok && found.node.ok) {
-                    var sub = build_card_mesh(found.node, deck, use_xform, defs_node)
-                    merge_sub_mesh(result, sub)
-                }
-            }
+        } elif (tag == "use") {
+            resolve_use(child, deck, grp_xform, defs_node, result)
+        } elif (tag == "g") {
+            var sub = build_card_mesh(child, deck, grp_xform, defs_node)
+            merge_sub_mesh(result, sub)
         }
-    }
-    // nested <g>
-    for (g in each_child(card_node, "g")) {
-        var sub = build_card_mesh(g, deck, grp_xform, defs_node)
-        merge_sub_mesh(result, sub)
     }
     return <- result
 }
