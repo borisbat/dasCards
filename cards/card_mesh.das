@@ -662,36 +662,80 @@ def private tessellate_path_xform(d : string; fill : float4; xform : Xform2D; va
         }
         return
     }
-    // Many contours — use stencil-based rendering for correct fill-rule
-    // Triangle fans preserve winding direction, enabling nonzero fill via stencil
-    if (num_contours > 1) {
-        var sg = StencilGroup(color = fill, evenodd = evenodd,
-            min_pt = float2(1e9, 1e9), max_pt = float2(-1e9, -1e9))
-        for (i in range(num_contours)) {
-            let n = length(contours[i])
-            if (n < 3) {
-                continue
+    // Many contours — try earcut for simple cases, stencil for complex nonzero winding
+    // Simple case: 2 contours with opposite winding = outer + hole → earcut
+    if (num_contours == 2 && !evenodd) {
+        let a0 = signed_polygon_area(contours[0])
+        let a1 = signed_polygon_area(contours[1])
+        if (length(contours[0]) >= 3 && length(contours[1]) >= 3 && (a0 > 0.0) != (a1 > 0.0)) {
+            // opposite winding — one is outer, one is hole
+            let outer_idx = abs(a0) > abs(a1) ? 0 : 1
+            let hole_idx = 1 - outer_idx
+            var poly : array<float2>
+            for (pt in contours[outer_idx]) {
+                poly |> push(pt)
             }
-            for (pt in contours[i]) {
-                sg.min_pt = float2(min(sg.min_pt.x, pt.x), min(sg.min_pt.y, pt.y))
-                sg.max_pt = float2(max(sg.max_pt.x, pt.x), max(sg.max_pt.y, pt.y))
+            var hole_indices : array<int>
+            hole_indices |> push(length(poly))
+            for (pt in contours[hole_idx]) {
+                poly |> push(pt)
             }
-            // Triangle fan from first vertex — preserves contour winding direction
-            var cm : ColoredMesh
-            cm.color = fill
-            cm.vertices := contours[i]
-            for (j in range(1, n - 1)) {
-                cm.indices |> push(0)
-                cm.indices |> push(j)
-                cm.indices |> push(j + 1)
+            var ok = true
+            try {
+                var tris = earcut(poly, hole_indices)
+                if (length(tris) > 0) {
+                    var cm : ColoredMesh
+                    cm.color = fill
+                    cm.vertices <- poly
+                    cm.indices <- tris
+                    add_mesh(result, cm)
+                    return
+                }
+            } recover {
+                ok = false
             }
-            sg.contours |> emplace(cm)
+            // earcut failed — fall through to stencil
         }
-        if (length(sg.contours) > 0) {
-            add_stencil_group(result, sg)
-        }
+    }
+    // Evenodd paths: containment tree + earcut
+    if (evenodd) {
+        tessellate_multi_contour_evenodd(contours, areas, centroids, fill, result)
         return
     }
+    // Complex nonzero winding — use stencil for correctness
+    tessellate_multi_contour_stencil(contours, fill, evenodd, result)
+}
+
+def private tessellate_multi_contour_stencil(contours : array<array<float2>>; fill : float4; evenodd : bool; var result : CardMesh) {
+    let num_contours = length(contours)
+    var sg = StencilGroup(color = fill, evenodd = evenodd,
+        min_pt = float2(1e9, 1e9), max_pt = float2(-1e9, -1e9))
+    for (i in range(num_contours)) {
+        let n = length(contours[i])
+        if (n < 3) {
+            continue
+        }
+        for (pt in contours[i]) {
+            sg.min_pt = float2(min(sg.min_pt.x, pt.x), min(sg.min_pt.y, pt.y))
+            sg.max_pt = float2(max(sg.max_pt.x, pt.x), max(sg.max_pt.y, pt.y))
+        }
+        var cm : ColoredMesh
+        cm.color = fill
+        cm.vertices := contours[i]
+        for (j in range(1, n - 1)) {
+            cm.indices |> push(0)
+            cm.indices |> push(j)
+            cm.indices |> push(j + 1)
+        }
+        sg.contours |> emplace(cm)
+    }
+    if (length(sg.contours) > 0) {
+        add_stencil_group(result, sg)
+    }
+}
+
+def private tessellate_multi_contour_evenodd(contours : array<array<float2>>; areas : array<float>; centroids : array<float2>; fill : float4; var result : CardMesh) {
+    let num_contours = length(contours)
     // Build containment tree: parent[i] = index of smallest contour containing i, or -1
     var par : array<int>
     resize(par, num_contours)
@@ -747,20 +791,13 @@ def private tessellate_path_xform(d : string; fill : float4; xform : Xform2D; va
         for (pt in contours[i]) {
             poly |> push(pt)
         }
-        let outer_ccw = areas[i] > 0.0
+
         for (j in range(num_contours)) {
             if (par[j] != i || length(contours[j]) < 3) {
                 continue
             }
             if ((depth[j] % 2) != 1) {
                 continue
-            }
-            // For nonzero fill: only opposite winding is a hole
-            if (!evenodd) {
-                let inner_ccw = areas[j] > 0.0
-                if (inner_ccw == outer_ccw) {
-                    continue  // same winding = filled, not a hole; will be its own outer at depth+1 effectively
-                }
             }
             hole_indices |> push(length(poly))
             for (pt in contours[j]) {
@@ -804,81 +841,6 @@ def private tessellate_path_xform(d : string; fill : float4; xform : Xform2D; va
                 cm.vertices <- poly
                 cm.indices <- tris
                 add_mesh(result, cm)
-            }
-        }
-    }
-    // Handle nonzero same-winding children at odd depth (they're filled, not holes)
-    // These need to be tessellated as independent outers
-    if (!evenodd) {
-        for (j in range(num_contours)) {
-            if (length(contours[j]) < 3 || (depth[j] % 2) != 1) {
-                continue
-            }
-            let parent_idx = par[j]
-            if (parent_idx < 0) {
-                continue
-            }
-            let parent_ccw = areas[parent_idx] > 0.0
-            let child_ccw = areas[j] > 0.0
-            if (child_ccw == parent_ccw) {
-                // Same winding as parent → filled shape, not a hole
-                // Tessellate independently (its own children will be handled separately)
-                var poly : array<float2>
-                var hole_indices : array<int>
-                for (pt in contours[j]) {
-                    poly |> push(pt)
-                }
-                // Collect its direct children as holes
-                for (k in range(num_contours)) {
-                    if (par[k] != j || length(contours[k]) < 3) {
-                        continue
-                    }
-                    let k_ccw = areas[k] > 0.0
-                    if (k_ccw != child_ccw) {
-                        hole_indices |> push(length(poly))
-                        for (pt in contours[k]) {
-                            poly |> push(pt)
-                        }
-                    }
-                }
-                if (length(hole_indices) > 0) {
-                    var ok = true
-                    try {
-                        var tris = earcut(poly, hole_indices)
-                        if (length(tris) > 0) {
-                            var cm : ColoredMesh
-                            cm.color = fill
-                            cm.vertices <- poly
-                            cm.indices <- tris
-                            add_mesh(result, cm)
-                        }
-                    } recover {
-                        ok = false
-                    }
-                    if (!ok) {
-                        var outer_only : array<float2>
-                        for (pt in contours[j]) {
-                            outer_only |> push(pt)
-                        }
-                        var tris = earcut(outer_only)
-                        if (length(tris) > 0) {
-                            var cm : ColoredMesh
-                            cm.color = fill
-                            cm.vertices <- outer_only
-                            cm.indices <- tris
-                            add_mesh(result, cm)
-                        }
-                    }
-                } else {
-                    var tris = earcut(poly)
-                    if (length(tris) > 0) {
-                        var cm : ColoredMesh
-                        cm.color = fill
-                        cm.vertices <- poly
-                        cm.indices <- tris
-                        add_mesh(result, cm)
-                    }
-                }
             }
         }
     }

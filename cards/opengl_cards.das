@@ -151,6 +151,7 @@ def draw_card(renderer : CardRenderer; deck : GpuDeck; index : int; x, y, scale 
     if (index < 0 || index >= length(deck.cards)) {
         return
     }
+    card_draws++
     let gpu & = unsafe(deck.cards[index])
     let mvp = extra * make_card_mvp(x, y, scale, screen_w, screen_h)
     glUseProgram(renderer.program)
@@ -289,6 +290,30 @@ def private draw_batch(batch : GpuMeshBatch; mvp : float4x4; prog : uint) {
     vs_card_bind_uniform(prog)
     glBindVertexArray(batch.vao)
     glDrawElements(GL_TRIANGLES, batch.num_indices, GL_UNSIGNED_INT, null)
+    card_draw_calls++
+    card_triangles += batch.num_indices / 3
+}
+
+var card_draws : int = 0        //! Per-frame draw_card() call count.
+var card_draw_calls : int = 0   //! Per-frame glDrawElements call count.
+var card_triangles : int = 0    //! Per-frame triangle count.
+
+def card_stats_reset() {
+    card_draws = 0
+    card_draw_calls = 0
+    card_triangles = 0
+}
+
+def card_stats_get_draws() : int {
+    return card_draws
+}
+
+def card_stats_get_draw_calls() : int {
+    return card_draw_calls
+}
+
+def card_stats_get_triangles() : int {
+    return card_triangles
 }
 
 def private draw_stencil_group(sg : GpuStencilGroup; mvp : float4x4; prog : uint) {

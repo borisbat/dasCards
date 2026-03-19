@@ -144,6 +144,41 @@ def card_grid_pos(lay : CardLayout; row, col : int; num_in_row : int) : float2 {
 // Live commands
 // ============================================================================
 
+struct CardStatsResult {
+    total_cards : int
+    total_draw_ops : int
+    total_stencil_groups : int
+    non_stencil_batches : int
+    avg_draw_calls_per_card : float
+    last_frame_draws : int
+    last_frame_draw_calls : int
+    last_frame_triangles : int
+}
+
+[live_command(description="Card draw op breakdown")]
+def cmd_card_stats(input : JsonValue?) : JsonValue? {
+    var stats = CardStatsResult()
+    stats.total_cards = card_count(gpu_deck)
+    for (i in range(card_count(gpu_deck))) {
+        let gpu & = unsafe(gpu_deck.cards[i])
+        stats.total_draw_ops += length(gpu.draw_ops)
+        stats.total_stencil_groups += length(gpu.stencil_groups)
+        for (op in gpu.draw_ops) {
+            if (op.stencil_idx >= 0) {
+                stats.non_stencil_batches += 0  // stencil = 2 calls
+            } else {
+                stats.non_stencil_batches++
+            }
+        }
+    }
+    let stencil_calls = stats.total_stencil_groups * 2
+    stats.avg_draw_calls_per_card = float(stencil_calls + stats.non_stencil_batches) / float(stats.total_cards)
+    stats.last_frame_draws = card_stats_get_draws()
+    stats.last_frame_draw_calls = card_stats_get_draw_calls()
+    stats.last_frame_triangles = card_stats_get_triangles()
+    return JV(stats)
+}
+
 struct CmdFocusArgs {
     card : string = ""
     zoom : float = 0.85
@@ -271,7 +306,9 @@ def update() {
     live_get_framebuffer_size(display_w, display_h)
     glViewport(0, 0, display_w, display_h)
     glClearColor(bg_color.x, bg_color.y, bg_color.z, 1.0)
-    glClear(GL_COLOR_BUFFER_BIT)
+    glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT)
+    gl_stats_reset()
+    card_stats_reset()
     glDisable(GL_DEPTH_TEST)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
@@ -444,6 +481,8 @@ def update() {
         draw_card(renderer, gpu_deck, draw_idx, fx, fy, fs, display_w, display_h, float4(1.0, 1.0, 1.0, 1.0), extra)
     }
 
+    gl_render_stats.draw_calls += card_stats_get_draw_calls()
+    gl_render_stats.triangles += card_stats_get_triangles()
     glDisable(GL_BLEND)
     live_end_frame()
 }
