@@ -79,7 +79,7 @@ struct Xform2D {
 struct CardDeck {
     components : table<string; SvgComponent>
     cards : table<string; CardMesh>
-    @safe_when_uninitialized font : GlyphFont
+    font : Font
     loaded : bool = false
 }
 
@@ -850,7 +850,7 @@ def private tessellate_multi_contour_evenodd(contours : array<array<float2>>; ar
 // Text tessellation (uses glyph_path for outline data)
 // ============================================================================
 
-def private tessellate_glyph(font : GlyphFont; codepoint : int; scale : float; fill : float4; xform : Xform2D; var result : CardMesh) {
+def private tessellate_glyph(font : Font; codepoint : int; scale : float; fill : float4; xform : Xform2D; var result : CardMesh) {
     let flat = get_glyph_path(font, codepoint, scale)
     let num_contours = length(flat.contours)
     if (num_contours == 0) {
@@ -902,7 +902,7 @@ def private tessellate_glyph(font : GlyphFont; codepoint : int; scale : float; f
     }
 }
 
-def private tessellate_text(font : GlyphFont; text : string; fill : float4; xform : Xform2D; var result : CardMesh; pixel_height : float = 22.0) {
+def private tessellate_text(font : Font; text : string; fill : float4; xform : Xform2D; var result : CardMesh; pixel_height : float = 22.0) {
     let scale = get_font_scale(font, pixel_height)
     var cursor_x = 0.0
     for (ch in each(text)) {

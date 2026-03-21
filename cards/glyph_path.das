@@ -4,7 +4,7 @@ options persistent_heap
 module glyph_path public
 
 require math
-require stbimage/stbimage_ttf
+require stbimage/stbimage_ttf public
 require svg_path
 
 // ============================================================================
