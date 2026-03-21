@@ -152,7 +152,7 @@ def draw_card(renderer : CardRenderer; deck : GpuDeck; index : int; x, y, scale 
         return
     }
     card_draws++
-    let gpu & = unsafe(deck.cards[index])
+    assume gpu = deck.cards[index]
     let mvp = extra * make_card_mvp(x, y, scale, screen_w, screen_h)
     glUseProgram(renderer.program)
     v_tint = tint
@@ -234,7 +234,7 @@ def private upload_card(card : CardMesh) : GpuCard {
     var pending_base = 0
     for (op in card.draw_order) {
         if (op.mesh_idx >= 0) {
-            let mesh & = unsafe(card.meshes[op.mesh_idx])
+            assume mesh = card.meshes[op.mesh_idx]
             for (v in mesh.vertices) {
                 pending_verts |> push(CardVertex(xy = v, color = mesh.color))
             }
@@ -251,7 +251,7 @@ def private upload_card(card : CardMesh) : GpuCard {
                 pending_idxs |> clear()
                 pending_base = 0
             }
-            let sg & = unsafe(card.stencil_groups[op.stencil_idx])
+            assume sg = card.stencil_groups[op.stencil_idx]
             var stencil_draw_op = GpuDrawOp(stencil_idx = length(gpu.stencil_groups))
             gpu.stencil_groups |> emplace(upload_stencil_group(sg))
             gpu.draw_ops |> emplace(stencil_draw_op)

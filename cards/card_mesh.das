@@ -79,7 +79,7 @@ struct Xform2D {
 struct CardDeck {
     components : table<string; SvgComponent>
     cards : table<string; CardMesh>
-    font : Font
+    @safe_when_uninitialized font : Font
     loaded : bool = false
 }
 
@@ -355,14 +355,14 @@ def private collect_paths(node : auto; var comp : SvgComponent; parent_fill : fl
 def private merge_sub_mesh(var result : CardMesh; var sub : CardMesh) {
     for (op in sub.draw_order) {
         if (op.mesh_idx >= 0) {
-            let m & = unsafe(sub.meshes[op.mesh_idx])
+            assume m = sub.meshes[op.mesh_idx]
             var cm : ColoredMesh
             cm.color = m.color
             cm.vertices := m.vertices
             cm.indices := m.indices
             add_mesh(result, cm)
         } elif (op.stencil_idx >= 0) {
-            let sg & = unsafe(sub.stencil_groups[op.stencil_idx])
+            assume sg = sub.stencil_groups[op.stencil_idx]
             var sg_copy = StencilGroup()
             sg_copy.color = sg.color
             sg_copy.min_pt = sg.min_pt
