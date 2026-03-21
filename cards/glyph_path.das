@@ -4,40 +4,17 @@ options persistent_heap
 module glyph_path public
 
 require math
-require fio
-require stbtruetype
+require stbimage/stbimage_ttf
 require svg_path
 
 // ============================================================================
-// Font handle — caller owns lifetime
+// Font loading
 // ============================================================================
 
-struct GlyphFont {
-    loaded : bool = false
-    data : array<uint8>
-    @safe_when_uninitialized info : stbtt_fontinfo
-}
-
-def load_glyph_font(path : string) : GlyphFont {
-    var font = GlyphFont()
-    let f = fopen(path, "rb")
-    if (f != null) {
-        let st = fstat(f)
-        font.data |> resize(int(st.size))
-        fread(f, font.data)
-        fclose(f)
-    }
-    if (length(font.data) == 0) {
+def load_glyph_font(path : string) : Font {
+    var font <- load_font(path)
+    if (!is_valid(font)) {
         to_log(LOG_ERROR, "glyph_path: failed to load font: {path}\n")
-        return <- font
-    }
-    unsafe {
-        let ok = stbtt_InitFont(addr(font.info), addr(font.data[0]), 0)
-        if (ok != 0) {
-            font.loaded = true
-        } else {
-            to_log(LOG_ERROR, "glyph_path: stbtt_InitFont failed for '{path}'\n")
-        }
     }
     return <- font
 }
@@ -89,45 +66,43 @@ def private flatten_cubic_glyph(p0, p1, p2, p3 : float2; tolerance : float; var 
 // Convert glyph outline to FlatPath (in font units * scale)
 // ============================================================================
 
-def get_glyph_path(font : GlyphFont; codepoint : int; scale : float = 1.0) : FlatPath {
+def get_glyph_path(font : Font; codepoint : int; scale : float = 1.0) : FlatPath {
     var result : FlatPath
-    if (!font.loaded) {
+    if (!is_valid(font)) {
         return <- result
     }
     var cur = float2(0.0, 0.0)
     var contour_pts : array<float2>
     var in_contour = false
     let tolerance = 0.5
-    unsafe {
-        stbtt_GetCodepointShape(addr(font.info), codepoint) <| $(v) {
-            let vt = int(v.vtype)
-            if (vt == STBTT_vmove) {
-                if (in_contour && length(contour_pts) >= 3) {
-                    var c = Contour()
-                    c.closed = true
-                    c.points <- contour_pts
-                    result.contours |> emplace(c)
-                }
-                delete contour_pts
-                contour_pts |> push(float2(float(v.x) * scale, float(v.y) * scale))
-                cur = float2(float(v.x) * scale, float(v.y) * scale)
-                in_contour = true
-            } elif (vt == STBTT_vline) {
-                let pt = float2(float(v.x) * scale, float(v.y) * scale)
-                contour_pts |> push(pt)
-                cur = pt
-            } elif (vt == STBTT_vcurve) {
-                let ctrl = float2(float(v.cx) * scale, float(v.cy) * scale)
-                let endp = float2(float(v.x) * scale, float(v.y) * scale)
-                flatten_quadratic(cur, ctrl, endp, tolerance, contour_pts)
-                cur = endp
-            } elif (vt == STBTT_vcubic) {
-                let c1 = float2(float(v.cx) * scale, float(v.cy) * scale)
-                let c2 = float2(float(v.cx1) * scale, float(v.cy1) * scale)
-                let endp = float2(float(v.x) * scale, float(v.y) * scale)
-                flatten_cubic_glyph(cur, c1, c2, endp, tolerance, contour_pts)
-                cur = endp
+    font |> codepoint_shape(codepoint) <| $(v) {
+        let vt = int(v.vtype)
+        if (vt == STBTT_vmove) {
+            if (in_contour && length(contour_pts) >= 3) {
+                var c = Contour()
+                c.closed = true
+                c.points <- contour_pts
+                result.contours |> emplace(c)
             }
+            delete contour_pts
+            contour_pts |> push(float2(float(v.x) * scale, float(v.y) * scale))
+            cur = float2(float(v.x) * scale, float(v.y) * scale)
+            in_contour = true
+        } elif (vt == STBTT_vline) {
+            let pt = float2(float(v.x) * scale, float(v.y) * scale)
+            contour_pts |> push(pt)
+            cur = pt
+        } elif (vt == STBTT_vcurve) {
+            let ctrl = float2(float(v.cx) * scale, float(v.cy) * scale)
+            let endp = float2(float(v.x) * scale, float(v.y) * scale)
+            flatten_quadratic(cur, ctrl, endp, tolerance, contour_pts)
+            cur = endp
+        } elif (vt == STBTT_vcubic) {
+            let c1 = float2(float(v.cx) * scale, float(v.cy) * scale)
+            let c2 = float2(float(v.cx1) * scale, float(v.cy1) * scale)
+            let endp = float2(float(v.x) * scale, float(v.y) * scale)
+            flatten_cubic_glyph(cur, c1, c2, endp, tolerance, contour_pts)
+            cur = endp
         }
     }
     if (in_contour && length(contour_pts) >= 3) {
@@ -143,49 +118,32 @@ def get_glyph_path(font : GlyphFont; codepoint : int; scale : float = 1.0) : Fla
 // Font metrics helpers
 // ============================================================================
 
-def get_font_scale(font : GlyphFont; pixel_height : float) : float {
-    if (!font.loaded) {
+def get_font_scale(font : Font; pixel_height : float) : float {
+    if (!is_valid(font)) {
         return 1.0
     }
-    unsafe {
-        return stbtt_ScaleForPixelHeight(addr(font.info), pixel_height)
-    }
-    return 1.0
+    return font |> scale_for_pixel_height(pixel_height)
 }
 
-def get_font_ascent(font : GlyphFont; scale : float) : float {
-    if (!font.loaded) {
+def get_font_ascent(font : Font; scale : float) : float {
+    if (!is_valid(font)) {
         return 0.0
     }
-    var ascent = 0
-    var descent = 0
-    var line_gap = 0
-    unsafe {
-        stbtt_GetFontVMetrics(addr(font.info), addr(ascent), addr(descent), addr(line_gap))
-    }
-    return float(ascent) * scale
+    let vm = font |> font_vmetrics()
+    return float(vm.ascent) * scale
 }
 
-def get_codepoint_advance(font : GlyphFont; codepoint : int; scale : float) : float {
-    if (!font.loaded) {
+def get_codepoint_advance(font : Font; codepoint : int; scale : float) : float {
+    if (!is_valid(font)) {
         return 0.0
     }
-    var advance_w = 0
-    var lsb = 0
-    unsafe {
-        stbtt_GetCodepointHMetrics(addr(font.info), codepoint, addr(advance_w), addr(lsb))
-    }
-    return float(advance_w) * scale
+    let hm = font |> codepoint_hmetrics(codepoint)
+    return float(hm.advance_width) * scale
 }
 
-def measure_text_width(font : GlyphFont; text : string; pixel_height : float = 22.0) : float {
-    if (!font.loaded) {
+def measure_text_width(font : Font; text : string; pixel_height : float = 22.0) : float {
+    if (!is_valid(font)) {
         return 0.0
     }
-    let scale = get_font_scale(font, pixel_height)
-    var width = 0.0
-    for (ch in each(text)) {
-        width += get_codepoint_advance(font, int(ch), scale)
-    }
-    return width
+    return font |> measure_text(text, pixel_height)
 }
