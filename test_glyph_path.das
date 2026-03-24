@@ -5,7 +5,7 @@ options persistent_heap
 require cards/glyph_path
 require cards/svg_path
 require math
-require fio
+require daslib/fio
 require dastest/testing_boost public
 
 let FONT_PATH = "cards/DejaVuSerif.ttf"

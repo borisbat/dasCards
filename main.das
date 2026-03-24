@@ -18,7 +18,7 @@ require strings
 require daslib/strings_boost
 require daslib/safe_addr
 require daslib/math_boost
-require fio
+require daslib/fio
 
 require cards/opengl_cards
 

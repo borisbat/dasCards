@@ -10,7 +10,7 @@ require math public
 require daslib/math_boost
 require card_mesh
 require strings
-require fio
+require daslib/fio
 
 let CARDS_DIR = dir_name(get_module_file_name("opengl_cards"))
 

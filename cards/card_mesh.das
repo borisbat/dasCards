@@ -5,7 +5,7 @@ module card_mesh public
 
 require math
 require strings
-require fio
+require daslib/fio
 require pugixml/PUGIXML_boost
 require svg_path
 require earcut
