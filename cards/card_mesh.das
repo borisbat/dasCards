@@ -99,7 +99,7 @@ def private hex_digit(ch : int) : int {
 }
 
 def parse_hex_color(s : string) : float4 {
-    if (length(s) == 0 || character_at(s, 0) != '#') {
+    if (length(s) == 0 || first_character(s) != '#') {
         if (s == "none") {
             return float4(0.0, 0.0, 0.0, 0.0)
         }
@@ -107,14 +107,14 @@ def parse_hex_color(s : string) : float4 {
     }
     let len = length(s)
     if (len == 7) {
-        let r = hex_digit(character_at(s, 1)) * 16 + hex_digit(character_at(s, 2))
-        let g = hex_digit(character_at(s, 3)) * 16 + hex_digit(character_at(s, 4))
-        let b = hex_digit(character_at(s, 5)) * 16 + hex_digit(character_at(s, 6))
+        let r = hex_digit(character_at(s, 1)) * 16 + hex_digit(character_at(s, 2)) // nolint:PERF003
+        let g = hex_digit(character_at(s, 3)) * 16 + hex_digit(character_at(s, 4)) // nolint:PERF003
+        let b = hex_digit(character_at(s, 5)) * 16 + hex_digit(character_at(s, 6)) // nolint:PERF003
         return float4(float(r) / 255.0, float(g) / 255.0, float(b) / 255.0, 1.0)
     } elif (len == 4) {
-        let r = hex_digit(character_at(s, 1))
-        let g = hex_digit(character_at(s, 2))
-        let b = hex_digit(character_at(s, 3))
+        let r = hex_digit(character_at(s, 1)) // nolint:PERF003
+        let g = hex_digit(character_at(s, 2)) // nolint:PERF003
+        let b = hex_digit(character_at(s, 3)) // nolint:PERF003
         return float4(float(r) / 15.0, float(g) / 15.0, float(b) / 15.0, 1.0)
     }
     return float4(0.0, 0.0, 0.0, 1.0)
@@ -373,7 +373,7 @@ def private merge_sub_mesh(var result : CardMesh; var sub : CardMesh) {
                 cm.color = c.color
                 cm.vertices := c.vertices
                 cm.indices := c.indices
-                sg_copy.contours |> emplace(cm)
+                sg_copy.contours |> emplace(cm) // nolint:PERF006 geometry-dependent contour count
             }
             add_stencil_group(result, sg_copy)
         }
@@ -385,7 +385,7 @@ def private resolve_use(use_node : auto; deck : CardDeck; grp_xform : Xform2D; d
     if (length(href) == 0) {
         href = node_attr(use_node, "href", "")
     }
-    if (length(href) == 0 || character_at(href, 0) != '#') {
+    if (length(href) == 0 || first_character(href) != '#') {
         return
     }
     let comp_id = slice(href, 1)
@@ -637,6 +637,7 @@ def private tessellate_path_xform(d : string; fill : float4; xform : Xform2D; va
             continue
         }
         var c = float2(0.0, 0.0)
+        pts |> reserve(length(flat.contours[i].points))
         for (pt in flat.contours[i].points) {
             let xpt = xform_point(pt, xform)
             pts |> push(xpt)
@@ -672,6 +673,7 @@ def private tessellate_path_xform(d : string; fill : float4; xform : Xform2D; va
             let outer_idx = abs(a0) > abs(a1) ? 0 : 1
             let hole_idx = 1 - outer_idx
             var poly : array<float2>
+            poly |> reserve(length(contours[outer_idx]) + length(contours[hole_idx]))
             for (pt in contours[outer_idx]) {
                 poly |> push(pt)
             }
@@ -722,6 +724,7 @@ def private tessellate_multi_contour_stencil(contours : array<array<float2>>; fi
         var cm : ColoredMesh
         cm.color = fill
         cm.vertices := contours[i]
+        cm.indices |> reserve((n - 2) * 3)
         for (j in range(1, n - 1)) {
             cm.indices |> push(0)
             cm.indices |> push(j)
@@ -788,6 +791,7 @@ def private tessellate_multi_contour_evenodd(contours : array<array<float2>>; ar
         // Collect direct children that are holes
         var poly : array<float2>
         var hole_indices : array<int>
+        poly |> reserve(length(contours[i]))
         for (pt in contours[i]) {
             poly |> push(pt)
         }
@@ -801,7 +805,7 @@ def private tessellate_multi_contour_evenodd(contours : array<array<float2>>; ar
             }
             hole_indices |> push(length(poly))
             for (pt in contours[j]) {
-                poly |> push(pt)
+                poly |> push(pt) // nolint:PERF006 multi-hole accumulation, count unknown ahead of loop
             }
         }
         if (length(hole_indices) > 0) {
@@ -821,6 +825,7 @@ def private tessellate_multi_contour_evenodd(contours : array<array<float2>>; ar
             if (!ok) {
                 // Fallback: tessellate outer without holes
                 var outer_only : array<float2>
+                outer_only |> reserve(length(contours[i]))
                 for (pt in contours[i]) {
                     outer_only |> push(pt)
                 }
@@ -859,6 +864,7 @@ def private tessellate_glyph(font : Font; codepoint : int; scale : float; fill :
     // Single contour — earcut
     if (num_contours == 1 && length(flat.contours[0].points) >= 3) {
         var pts : array<float2>
+        pts |> reserve(length(flat.contours[0].points))
         for (pt in flat.contours[0].points) {
             pts |> push(xform_point(float2(pt.x, -pt.y), xform))
         }
@@ -881,6 +887,7 @@ def private tessellate_glyph(font : Font; codepoint : int; scale : float; fill :
             continue
         }
         var pts : array<float2>
+        pts |> reserve(n)
         for (pt in flat.contours[i].points) {
             let xpt = xform_point(float2(pt.x, -pt.y), xform)
             pts |> push(xpt)
@@ -890,6 +897,7 @@ def private tessellate_glyph(font : Font; codepoint : int; scale : float; fill :
         var cm : ColoredMesh
         cm.color = fill
         cm.vertices := pts
+        cm.indices |> reserve((n - 2) * 3)
         for (j in range(1, n - 1)) {
             cm.indices |> push(0)
             cm.indices |> push(j)

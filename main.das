@@ -71,6 +71,7 @@ let RANKS = "1;2;3;4;5;6;7;8;9;10;jack;queen;king"
 def build_suit_row(suit : string) : array<int> {
     var row : array<int>
     let rank_list = split(RANKS, ";")
+    row |> reserve(length(rank_list))
     for (rank in rank_list) {
         row |> push(find_card(gpu_deck, "{suit}_{rank}"))
     }

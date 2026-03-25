@@ -199,6 +199,14 @@ def private upload_stencil_group(sg : StencilGroup) : GpuStencilGroup {
     var sg_verts : array<CardVertex>
     var sg_idxs : array<int>
     var sg_base = 0
+    var total_verts = 0
+    var total_idxs = 0
+    for (c in sg.contours) {
+        total_verts += length(c.vertices)
+        total_idxs += length(c.indices)
+    }
+    sg_verts |> reserve(total_verts)
+    sg_idxs |> reserve(total_idxs)
     for (c in sg.contours) {
         for (v in c.vertices) {
             sg_verts |> push(CardVertex(xy = v, color = sg.color))
@@ -236,10 +244,10 @@ def private upload_card(card : CardMesh) : GpuCard {
         if (op.mesh_idx >= 0) {
             assume mesh = card.meshes[op.mesh_idx]
             for (v in mesh.vertices) {
-                pending_verts |> push(CardVertex(xy = v, color = mesh.color))
+                pending_verts |> push(CardVertex(xy = v, color = mesh.color)) // nolint:PERF006 accumulates across draw ops with intermittent clears
             }
             for (idx in mesh.indices) {
-                pending_idxs |> push(idx + pending_base)
+                pending_idxs |> push(idx + pending_base) // nolint:PERF006 accumulates across draw ops with intermittent clears
             }
             pending_base += length(mesh.vertices)
         } elif (op.stencil_idx >= 0) {

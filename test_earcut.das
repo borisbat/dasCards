@@ -41,6 +41,7 @@ def test_square(t : T?) {
 [test]
 def test_pentagon(t : T?) {
     var poly : array<float2>
+    poly |> reserve(5)
     for (i in range(5)) {
         let angle = float(i) * 2.0 * PI / 5.0
         poly |> push(float2(cos(angle) * 100.0, sin(angle) * 100.0))
@@ -154,6 +155,7 @@ def test_empty_polygon(t : T?) {
 def test_star_shape(t : T?) {
     // 5-pointed star (self-intersecting-like concave polygon)
     var poly : array<float2>
+    poly |> reserve(10)
     for (i in range(5)) {
         let outer_angle = float(i) * 2.0 * PI / 5.0 - PI / 2.0
         poly |> push(float2(cos(outer_angle) * 100.0, sin(outer_angle) * 100.0))
