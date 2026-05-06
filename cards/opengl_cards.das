@@ -11,8 +11,7 @@ require daslib/math_boost
 require card_mesh
 require strings
 require daslib/fio
-
-let CARDS_DIR = dir_name(get_module_file_name("opengl_cards"))
+require daslib/module_path
 
 // ============================================================================
 // Card dimensions (SVG document space)
@@ -98,7 +97,7 @@ def create_card_renderer() : CardRenderer {
 }
 
 def load_gpu_deck() : GpuDeck {
-    let svg_path = "{CARDS_DIR}/svg-cards.svg"
+    let svg_path = "{get_this_module_dir()}/svg-cards.svg"
     var deck <- load_deck(svg_path)
     var gpu_deck = GpuDeck()
     if (!deck.loaded) {

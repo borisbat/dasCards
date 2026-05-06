@@ -21,3 +21,13 @@ def resolve(sdk_version, version : string) {
         download_tag("v{version}")
     }
 }
+
+[export]
+def release() {
+    // Runtime assets loaded by dasCards (e.g. card_mesh.das opens
+    // `{dir_name(get_module_file_name("card_mesh"))}/svg-cards.svg`).
+    // Shipped at <bundle>/modules/das-cards/cards/<file> so the recipient
+    // exe finds them at the same relative layout.
+    release_include("cards/svg-cards.svg")
+    release_include("cards/DejaVuSerif.ttf")
+}

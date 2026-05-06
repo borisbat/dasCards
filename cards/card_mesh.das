@@ -6,12 +6,11 @@ module card_mesh public
 require math
 require strings
 require daslib/fio
+require daslib/module_path
 require pugixml/PUGIXML_boost
 require svg_path
 require earcut
 require glyph_path
-
-let CARD_MESH_DIR = dir_name(get_module_file_name("card_mesh"))
 
 // ============================================================================
 // Card mesh data types
@@ -250,7 +249,7 @@ def private collect_components_recursive(node : auto; var deck : CardDeck; paren
 }
 
 def private load_svg_components(svg_file : string; var deck : CardDeck) {
-    deck.font <- load_glyph_font("{CARD_MESH_DIR}/DejaVuSerif.ttf")
+    deck.font <- load_glyph_font("{get_this_module_dir()}/DejaVuSerif.ttf")
     open_xml(svg_file) <| $(doc, ok) {
         if (!ok) {
             to_log(LOG_ERROR, "card_mesh: failed to open SVG: {svg_file}\n")
@@ -935,4 +934,12 @@ def load_deck(svg_file : string) : CardDeck {
         to_log(LOG_INFO, "card_mesh: loaded {length(deck.components)} components, {length(deck.cards)} cards from '{svg_file}'\n")
     }
     return <- deck
+}
+
+//! Path to the bundled DejaVuSerif.ttf used by card glyphs. Resolved via
+//! `get_this_module_dir()` so daspkg-release standalone bundles get the
+//! relocated path; user code that wants its own UI font can `require cards/card_mesh`
+//! and read this directly instead of guessing the dasCards install layout.
+def card_mesh_ttf_path() : string {
+    return "{get_this_module_dir()}/DejaVuSerif.ttf"
 }
