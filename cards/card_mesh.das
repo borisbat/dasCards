@@ -943,3 +943,9 @@ def load_deck(svg_file : string) : CardDeck {
 def card_mesh_ttf_path() : string {
     return "{get_this_module_dir()}/DejaVuSerif.ttf"
 }
+
+//! Path to the bundled svg-cards.svg deck, resolved the same way as
+//! `card_mesh_ttf_path` so tests and bundles find it regardless of CWD.
+def card_mesh_svg_path() : string {
+    return "{get_this_module_dir()}/svg-cards.svg"
+}

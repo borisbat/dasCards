@@ -26,7 +26,7 @@ def font_available() : bool {
 [test]
 def test_load_font_missing_file(t : T?) {
     let font = load_glyph_font("nonexistent.ttf")
-    t |> equal(font.loaded, false)
+    t |> equal(is_valid(font), false)
 }
 
 [test]
@@ -74,7 +74,7 @@ def test_load_font_success(t : T?) {
         return
     }
     let font = load_glyph_font(FONT_PATH)
-    t |> equal(font.loaded, true)
+    t |> equal(is_valid(font), true)
 }
 
 [test]
