@@ -97,7 +97,7 @@ def create_card_renderer() : CardRenderer {
 }
 
 def load_gpu_deck() : GpuDeck {
-    let svg_path = "{get_this_module_dir()}/svg-cards.svg"
+    let svg_path = card_mesh_svg_path()
     var deck <- load_deck(svg_path)
     var gpu_deck = GpuDeck()
     if (!deck.loaded) {

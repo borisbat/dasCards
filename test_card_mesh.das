@@ -47,7 +47,7 @@ def test_parse_transform_matrix(t : T?) {
 [test]
 def test_load_deck(t : T?) {
     // requires CWD to be the dasCards directory
-    let deck = load_deck("{CARD_MESH_DIR}/svg-cards.svg")
+    let deck = load_deck(card_mesh_svg_path())
     if (!deck.loaded) {
         return
     }
@@ -131,7 +131,7 @@ def test_parse_transform_scale_uniform(t : T?) {
 [test]
 def test_load_deck_spade_queen_has_color(t : T?) {
     // Regression: spade_queen was missing colored polygons (queen_2 uses <polygon>, not <path>)
-    let deck = load_deck("{CARD_MESH_DIR}/svg-cards.svg")
+    let deck = load_deck(card_mesh_svg_path())
     if (!deck.loaded) {
         return
     }
@@ -148,7 +148,7 @@ def test_load_deck_spade_queen_has_color(t : T?) {
 [test]
 def test_load_deck_circle_elements(t : T?) {
     // Cards use <circle> elements for decorative dots on face cards
-    let deck = load_deck("{CARD_MESH_DIR}/svg-cards.svg")
+    let deck = load_deck(card_mesh_svg_path())
     if (!deck.loaded) {
         return
     }
@@ -165,7 +165,7 @@ def test_load_deck_circle_elements(t : T?) {
 [test]
 def test_load_deck_polyline_elements(t : T?) {
     // king_2, king_3, jack_3 use <polyline> elements
-    let deck = load_deck("{CARD_MESH_DIR}/svg-cards.svg")
+    let deck = load_deck(card_mesh_svg_path())
     if (!deck.loaded) {
         return
     }
