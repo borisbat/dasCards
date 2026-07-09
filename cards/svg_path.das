@@ -48,7 +48,7 @@ struct PathParser {
 }
 
 def make_parser(d : string) : PathParser {
-    return PathParser(src = d, dat = unsafe(reinterpret<uint8?> d), pos = 0, len = length(d))
+    return PathParser(src = d, dat = unsafe(reinterpret<uint8?>(d)), pos = 0, len = length(d))
 }
 
 def private ch_at(p : PathParser) : int {
