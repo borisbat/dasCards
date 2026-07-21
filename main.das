@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options persistent_heap
 
 require glfw/glfw_boost
