@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options no_aot
 
 require cards/svg_path
@@ -92,11 +93,8 @@ def test_flatten_triangle(t : T?) {
     let flat = flatten_svg_path(path)
     t |> equal(length(flat.contours), 1)
     t |> equal(flat.contours[0].closed, true)
-    // M pushes (0,0), L pushes (100,0), L pushes (50,100), Z closes — but parser
-    // emits M + 2x L = 3 commands for "L10,0 L10,10" plus the original M0,0
-    // Actually the path is "M0,0 L100,0 L50,100 Z" = M + L + L + Z = 4 commands
-    // flatten: M pushes start, each L pushes endpoint = 3 points total... but got 4
-    // Let's just verify it works — the important thing is closed=true
+    // flatten emits the M start plus each segment endpoint (4 for this closed triangle),
+    // so keep the point count a loose bound — closed=true is the real invariant here
     t |> success(length(flat.contours[0].points) >= 3)
 }
 

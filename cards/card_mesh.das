@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 options persistent_heap
 
 module card_mesh public
@@ -663,7 +664,6 @@ def private tessellate_path_xform(d : string; fill : float4; xform : Xform2D; va
         return
     }
     // Many contours — try earcut for simple cases, stencil for complex nonzero winding
-    // Simple case: 2 contours with opposite winding = outer + hole → earcut
     if (num_contours == 2 && !evenodd) {
         let a0 = signed_polygon_area(contours[0])
         let a1 = signed_polygon_area(contours[1])
@@ -778,8 +778,7 @@ def private tessellate_multi_contour_evenodd(contours : array<array<float2>>; ar
         }
         depth[i] = dp
     }
-    // Tessellate: even-depth contours are "outers" (filled shapes)
-    // Their direct odd-depth children are potential holes
+    // Even-depth contours are outers (filled); their direct odd-depth children are holes
     for (i in range(num_contours)) {
         if (length(contours[i]) < 3) {
             continue
@@ -936,10 +935,9 @@ def load_deck(svg_file : string) : CardDeck {
     return <- deck
 }
 
-//! Path to the bundled DejaVuSerif.ttf used by card glyphs. Resolved via
-//! `get_this_module_dir()` so daspkg-release standalone bundles get the
-//! relocated path; user code that wants its own UI font can `require cards/card_mesh`
-//! and read this directly instead of guessing the dasCards install layout.
+//! Path to the bundled DejaVuSerif.ttf used by card glyphs, resolved via
+//! `get_this_module_dir()` so daspkg-release bundles get the relocated path.
+//! Public so user code can reuse it as a UI font instead of guessing the install layout.
 def card_mesh_ttf_path() : string {
     return "{get_this_module_dir()}/DejaVuSerif.ttf"
 }
