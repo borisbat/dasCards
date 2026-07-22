@@ -1,0 +1,105 @@
+name: Tests
+
+# Compiles and runs dasCards' headless test suite against a fresh daslang
+# build. Mirrors dasDuckDB's tests.yml minus the native module: dasCards is
+# pure daslang (its .das_module only registers cards/* source paths), so
+# there is no daspkg install step -- daslang loads the module via
+# -load_module.
+#
+# Only the four algorithm test files run here (earcut / SVG path / glyph
+# path / card mesh). test_opengl_cards.das and main.das need a GL context +
+# window and are intentionally left out of CI; the daslang build below
+# disables GLFW for speed, so they could not run anyway.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ${{ matrix.os }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: "Checkout daslang"
+        uses: actions/checkout@v4
+        with:
+          repository: GaijinEntertainment/daScript
+          path: daslang-src
+          ref: master
+
+      - name: "Checkout dasCards"
+        uses: actions/checkout@v4
+        with:
+          path: dasCards
+
+      - name: "Install system dependencies (macOS)"
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install bison
+          echo "/opt/homebrew/opt/bison/bin" >> "$GITHUB_PATH"
+
+      - name: "Install CMake and Ninja"
+        uses: lukka/get-cmake@latest
+
+      - name: "Set up sccache"
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: "Build daslang"
+        working-directory: daslang-src
+        run: |
+          set -eux
+          cmake --no-warn-unused-cli -B./build \
+            -DCMAKE_BUILD_TYPE:STRING=Release \
+            -DDAS_LLVM_DISABLED=ON \
+            -DDAS_HV_DISABLED=ON \
+            -DDAS_GLFW_DISABLED=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -G Ninja
+          cmake --build ./build --parallel --target daslang
+          sccache --show-stats
+          echo "BIN_DIR=bin" >> "$GITHUB_ENV"
+
+      - name: "Lint: every committed .das must compile (paranoid + perf + style)"
+        # Warnings do not fail the build yet -- dasCards carries pre-existing
+        # PERF/STYLE debt. `|| true` keeps this informational; a compile error
+        # (exit 1) still fails via the grep gate below.
+        working-directory: daslang-src
+        run: |
+          set -eux
+          ${BIN_DIR}/daslang -load_module "${GITHUB_WORKSPACE}/dasCards" \
+            utils/lint/main.das -- "${GITHUB_WORKSPACE}/dasCards" -q -j 0 \
+            | tee lint.log || true
+          if grep -q 'error(s)' lint.log && ! grep -qE '0 error\(s\)' lint.log; then
+            echo "dasCards has compile errors -- see lint.log above"
+            exit 1
+          fi
+
+      - name: "Run headless test suite (earcut / SVG / glyph / card mesh)"
+        working-directory: daslang-src
+        run: |
+          set -eux
+          ${BIN_DIR}/daslang dastest/dastest.das -- \
+            -load_module "${GITHUB_WORKSPACE}/dasCards" \
+            --test "${GITHUB_WORKSPACE}/dasCards/test_earcut.das" \
+            --test "${GITHUB_WORKSPACE}/dasCards/test_svg_path.das" \
+            --test "${GITHUB_WORKSPACE}/dasCards/test_glyph_path.das" \
+            --test "${GITHUB_WORKSPACE}/dasCards/test_card_mesh.das" \
+            --timeout 300
