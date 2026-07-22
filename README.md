@@ -1,5 +1,7 @@
 # das-cards
 
+[![Tests](https://github.com/borisbat/dasCards/actions/workflows/tests.yml/badge.svg)](https://github.com/borisbat/dasCards/actions/workflows/tests.yml)
+
 Vector playing card rendering for daslang + OpenGL. All 52 standard cards, 2 jokers, and 2 card backs rendered as sharp triangle meshes from SVG source — no textures, no rasterization, crisp at any scale.
 
 Based on [SVG-cards](https://github.com/htdebeer/SVG-cards) v4.0.0 (LGPL-2.1).
