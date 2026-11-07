@@ -682,6 +682,7 @@ def private tessellate_path_xform(d : string; fill : float4; xform : Xform2D; va
                 poly |> push(pt)
             }
             var ok = true
+            var meshed = false
             try {
                 var tris = earcut(poly, hole_indices)
                 if (length(tris) > 0) {
@@ -690,11 +691,12 @@ def private tessellate_path_xform(d : string; fill : float4; xform : Xform2D; va
                     cm.vertices <- poly
                     cm.indices <- tris
                     add_mesh(result, cm)
-                    return
+                    meshed = true
                 }
             } recover {
                 ok = false
             }
+            return if (meshed)
             // earcut failed — fall through to stencil
         }
     }
