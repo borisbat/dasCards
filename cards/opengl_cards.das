@@ -340,7 +340,7 @@ def private draw_stencil_group(sg : GpuStencilGroup; mvp : float4x4; prog : uint
     draw_batch(sg.contour_batch, mvp, prog)
     glColorMask(true, true, true, true)
     glStencilFunc(GL_NOTEQUAL, 0, 0xFFu)
-    glStencilOp(GL_KEEP, GL_KEEP, uint(0))
+    glStencilOp(GL_KEEP, GL_KEEP, 0u)
     draw_batch(sg.cover_batch, mvp, prog)
     glDisable(GL_STENCIL_TEST)
 }
